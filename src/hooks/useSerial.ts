@@ -27,6 +27,15 @@ export function useSerial() {
       setConnected(true);
       setLastSent("Połączono z portem szeregowym");
 
+      port.addEventListener("disconnect", () => {
+        setConnected(false);
+        setDeviceInfo(null);
+        setLastSent("Urządzenie odłączone");
+        portRef.current = null;
+        readerRef.current = null;
+        writerRef.current = null;
+      });
+
       setDeviceInfo({
         configurator: "1.0.0",
         firmware: "ESP32-C3",
