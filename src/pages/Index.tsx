@@ -6,7 +6,7 @@ import { useSerial } from "@/hooks/useSerial";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("Ports");
-  const { connected, deviceInfo, connect, disconnect } = useSerial();
+  const { connected, deviceInfo, lastSent, connect, disconnect, send } = useSerial();
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">
@@ -16,14 +16,18 @@ const Index = () => {
         onConnect={connect}
         onDisconnect={disconnect}
       />
-      <StatusBar />
+      <StatusBar lastMessage={lastSent} />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
         <main className="flex-1 overflow-y-auto bg-background p-6">
           <h1 className="text-2xl font-light text-foreground mb-4">{activeTab}</h1>
           {!connected && (
             <div className="text-muted-foreground text-sm">
-              Kliknij "Connect" aby połączyć się z kontrolerem ESP32-C3.
+              Kliknij "Connect" aby połączyć się z ESP32-C3.
+              <br />
+              <span className="text-xs text-destructive mt-1 block">
+                ⚠ Web Serial działa tylko gdy strona jest otwarta bezpośrednio w przeglądarce (nie w iframe). Użyj przycisku "Open in new tab" w preview.
+              </span>
             </div>
           )}
           {connected && (
