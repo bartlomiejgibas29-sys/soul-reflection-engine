@@ -24,10 +24,6 @@ const Index = () => {
           {!connected && (
             <div className="text-muted-foreground text-sm">
               Kliknij "Connect" aby połączyć się z ESP32-C3.
-              <br />
-              <span className="text-xs text-destructive mt-1 block">
-                ⚠ Web Serial działa tylko gdy strona jest otwarta bezpośrednio w przeglądarce (nie w iframe). Użyj przycisku "Open in new tab" w preview.
-              </span>
             </div>
           )}
           {connected && (
