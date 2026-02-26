@@ -5,18 +5,8 @@ import {
 import { useState } from "react";
 
 const navItems = [
-  { icon: Wrench, label: "Setup" },
   { icon: Cable, label: "Ports" },
-  { icon: Settings, label: "Configuration" },
-  { icon: BatteryCharging, label: "Power & Battery" },
-  { icon: BarChart3, label: "PID Tuning" },
   { icon: Radio, label: "Receiver" },
-  { icon: Layers, label: "Modes" },
-  { icon: Cog, label: "Motors" },
-  { icon: Monitor, label: "OSD" },
-  { icon: Tv, label: "Video Transmitter" },
-  { icon: HardDrive, label: "Blackbox" },
-  { icon: Terminal, label: "CLI" },
 ];
 
 interface SidebarProps {
