@@ -9,13 +9,15 @@ interface DeviceInfo {
 export function useSerial() {
   const [connected, setConnected] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
+  const [lastSent, setLastSent] = useState<string>("");
   const portRef = useRef<any>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
+  const writerRef = useRef<WritableStreamDefaultWriter<Uint8Array> | null>(null);
 
   const connect = useCallback(async () => {
     try {
       if (!("serial" in navigator)) {
-        alert("Twoja przeglądarka nie obsługuje Web Serial API. Użyj Chrome lub Edge.");
+        alert("Web Serial API niedostępne. Otwórz stronę bezpośrednio w Chrome/Edge (nie w iframe).");
         return;
       }
 
@@ -23,22 +25,28 @@ export function useSerial() {
       await port.open({ baudRate: 115200 });
       portRef.current = port;
       setConnected(true);
+      setLastSent("Połączono z portem szeregowym");
 
-      // Placeholder device info - will be read from device in future
       setDeviceInfo({
         configurator: "1.0.0",
         firmware: "ESP32-C3",
         target: "ESP32-C3",
       });
 
-      // Start reading (background)
+      // Writer
+      const writer = port.writable?.getWriter();
+      if (writer) writerRef.current = writer;
+
+      // Reader
       const reader = port.readable?.getReader();
       if (reader) {
         readerRef.current = reader;
         readLoop(reader);
       }
     } catch (err: any) {
-      if (err.name !== "NotFoundError") {
+      if (err.name === "SecurityError") {
+        alert("Web Serial jest zablokowane w iframe. Otwórz stronę w nowej karcie (kliknij ikonę 'open in new tab' w preview).");
+      } else if (err.name !== "NotFoundError") {
         console.error("Serial connection error:", err);
       }
     }
@@ -49,7 +57,6 @@ export function useSerial() {
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        // TODO: parse incoming data from ESP32-C3
         const text = new TextDecoder().decode(value);
         console.log("[Serial RX]:", text);
       }
@@ -58,11 +65,23 @@ export function useSerial() {
     }
   };
 
+  const send = useCallback(async (data: string) => {
+    if (writerRef.current) {
+      const encoded = new TextEncoder().encode(data + "\n");
+      await writerRef.current.write(encoded);
+      setLastSent(`TX: ${data}`);
+    }
+  }, []);
+
   const disconnect = useCallback(async () => {
     try {
       if (readerRef.current) {
         await readerRef.current.cancel();
         readerRef.current = null;
+      }
+      if (writerRef.current) {
+        writerRef.current.releaseLock();
+        writerRef.current = null;
       }
       if (portRef.current) {
         await portRef.current.close();
@@ -73,7 +92,8 @@ export function useSerial() {
     }
     setConnected(false);
     setDeviceInfo(null);
+    setLastSent("Rozłączono");
   }, []);
 
-  return { connected, deviceInfo, connect, disconnect };
+  return { connected, deviceInfo, lastSent, connect, disconnect, send };
 }
