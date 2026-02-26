@@ -1,11 +1,21 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from "react";
+import TopHeader from "@/components/TopHeader";
+import StatusBar from "@/components/StatusBar";
+import Sidebar from "@/components/Sidebar";
+import SetupPage from "@/components/SetupPage";
 
 const Index = () => {
+  const [activeTab, setActiveTab] = useState("Setup");
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
+    <div className="flex flex-col h-screen overflow-hidden">
+      <TopHeader />
+      <StatusBar />
+      <div className="flex flex-1 overflow-hidden">
+        <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+        <main className="flex-1 overflow-y-auto bg-background">
+          <SetupPage />
+        </main>
       </div>
     </div>
   );
