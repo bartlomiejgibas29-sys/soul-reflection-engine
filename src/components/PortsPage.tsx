@@ -4,26 +4,42 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import type { PinConfig } from "@/hooks/useSerial";
 
 const PINS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 21];
 const UART_OPTIONS = ["None", "UART(1)", "UART(2)", "UART(3)", "Light"];
 const SPEC_OPTIONS = ["RX", "TX"];
-
-interface PinConfig {
-  uart: string;
-  specification: string;
-}
 
 const defaultConfig = (): PinConfig => ({
   uart: "None",
   specification: "None",
 });
 
-const PortsPage = () => {
+interface PortsPageProps {
+  serialPinConfigs?: Record<number, PinConfig> | null;
+}
+
+const PortsPage = ({ serialPinConfigs }: PortsPageProps) => {
   const [configs, setConfigs] = useState<Record<number, PinConfig>>(
     () => Object.fromEntries(PINS.map((p) => [p, defaultConfig()]))
   );
+
+  // Apply config received from ESP32
+  useEffect(() => {
+    if (serialPinConfigs) {
+      setConfigs((prev) => {
+        const updated = { ...prev };
+        for (const [pinStr, cfg] of Object.entries(serialPinConfigs)) {
+          const pin = parseInt(pinStr);
+          if (PINS.includes(pin)) {
+            updated[pin] = cfg;
+          }
+        }
+        return updated;
+      });
+    }
+  }, [serialPinConfigs]);
 
   const update = (pin: number, key: keyof PinConfig, value: string) => {
     setConfigs((prev) => {
@@ -38,9 +54,9 @@ const PortsPage = () => {
 
   return (
     <div>
-      <div className="bg-accent/30 border border-accent/50 rounded p-3 mb-4 text-sm text-muted-foreground">
-        <p><strong>Note:</strong> not all combinations are valid. When the flight controller firmware detects this the serial port configuration will be reset.</p>
-        <p><strong>Note:</strong> Do <span className="text-destructive font-bold">NOT</span> disable MSP on the first serial port unless you know what you are doing.</p>
+      <div className="bg-accent/30 border border-accent/50 rounded p-3 mb-4 text-sm text-muted-foreground space-y-1">
+        <p><strong>Note:</strong> Setting the UART to pins 0 and 1 is not recommended; they are used for communication with the computer.</p>
+        <p><strong>Note:</strong> Pins 20 and 21 should be used as UART1.</p>
       </div>
 
       <div className="overflow-x-auto">
