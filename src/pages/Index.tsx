@@ -6,6 +6,7 @@ import PortsPage from "@/components/PortsPage";
 import LandingPage from "@/components/LandingPage";
 import SetupPage from "@/components/SetupPage";
 import ReceiverPage from "@/components/ReceiverPage";
+import GpsPage from "@/components/GpsPage";
 import Console from "@/components/Console";
 import { useSerial } from "@/hooks/useSerial";
 
@@ -17,7 +18,7 @@ const Index = () => {
       return "Setup";
     }
   });
-  const { connected, deviceInfo, lastSent, uartConfigs, receiverData, logs, connect, disconnect, send } = useSerial();
+  const { connected, deviceInfo, lastSent, uartConfigs, receiverData, receiverSettings, gpsData, logs, connect, disconnect, send } = useSerial();
 
   useEffect(() => {
     try {
@@ -59,7 +60,9 @@ const Index = () => {
                 
                 {activeTab === "Ports" && <PortsPage uartConfigs={uartConfigs} connected={connected} onSend={send} />}
                 
-                {activeTab === "Receiver" && <ReceiverPage data={receiverData} onSend={send} />}
+                {activeTab === "Receiver" && <ReceiverPage data={receiverData} settings={receiverSettings} onSend={send} />}
+
+                {activeTab === "GPS" && <GpsPage data={gpsData} onSend={send} />}
 
                 {activeTab === "CLI" && (
                   <div className="h-full pb-2">

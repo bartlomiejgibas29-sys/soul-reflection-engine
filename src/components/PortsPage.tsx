@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { RefreshCw, Save, ArrowLeftRight } from "lucide-react";
 
 const BAUD_OPTIONS = ["9600", "57600", "115200", "230400", "420000", "460800"];
+const LOW_BAUD_OPTIONS = ["9600", "57600", "115200"];
 
 interface PortsPageProps {
   uartConfigs?: UartConfig[];
@@ -63,6 +64,7 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
         cmds.push(`SET_UART${cfg.id}_RX:${cfg.rx}`);
         cmds.push(`SET_UART${cfg.id}_TX:${cfg.tx}`);
         cmds.push(`SET_UART${cfg.id}_BAUD:${cfg.baudrate}`);
+        cmds.push(`SET_UART${cfg.id}_TYPE:${cfg.type || "GENERIC"}`);
         if (cfg.enabled) {
           cmds.push(`ENABLE_UART${cfg.id}`);
         } else {
@@ -126,6 +128,9 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
 
       {/* Warnings */}
       <div className="space-y-2 text-xs">
+        <div className="bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-2 text-destructive">
+          ⚠ <strong>UART 2 & 3</strong> are emulated (SoftwareSerial) and slow. Max recommended baudrate is <strong>115200</strong>. Do not use for high-speed devices like ELRS receivers.
+        </div>
         <div className="bg-primary/8 border border-primary/20 rounded-lg px-4 py-2 text-primary/80">
           ⚠ Setting UART to pins <strong>0</strong> and <strong>1</strong> is not recommended — they are used for USB communication.
         </div>
@@ -141,6 +146,7 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
             <TableRow className="bg-card hover:bg-card">
               <TableHead className="w-[90px] text-xs font-semibold text-muted-foreground">Port</TableHead>
               <TableHead className="w-[80px] text-xs font-semibold text-muted-foreground">Enabled</TableHead>
+              <TableHead className="w-[120px] text-xs font-semibold text-muted-foreground">Type</TableHead>
               <TableHead className="text-xs font-semibold text-muted-foreground">RX Pin</TableHead>
               <TableHead className="text-xs font-semibold text-muted-foreground">TX Pin</TableHead>
               <TableHead className="text-xs font-semibold text-muted-foreground">Baudrate</TableHead>
@@ -165,6 +171,22 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
                       checked={cfg.enabled}
                       onCheckedChange={(checked) => update(cfg.id, "enabled", checked)}
                     />
+                  </TableCell>
+                  <TableCell>
+                    <Select
+                      value={cfg.type || "GENERIC"}
+                      onValueChange={(v) => update(cfg.id, "type", v)}
+                      disabled={!cfg.enabled}
+                    >
+                      <SelectTrigger className="h-7 w-[110px] text-xs font-mono bg-secondary/50 border-border">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="GENERIC">GENERIC</SelectItem>
+                        <SelectItem value="RECEIVER">RECEIVER</SelectItem>
+                        <SelectItem value="GPS">GPS</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </TableCell>
                   <TableCell>
                     <Input
@@ -194,7 +216,7 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {BAUD_OPTIONS.map((opt) => (
+                        {(cfg.id === 1 ? BAUD_OPTIONS : LOW_BAUD_OPTIONS).map((opt) => (
                           <SelectItem key={opt} value={opt}>{opt}</SelectItem>
                         ))}
                       </SelectContent>

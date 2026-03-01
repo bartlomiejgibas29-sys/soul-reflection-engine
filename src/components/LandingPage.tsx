@@ -14,7 +14,7 @@ const LandingPage = () => {
           </h1>
         </div>
         <p className="text-muted-foreground text-lg max-w-2xl text-center">
-          Welcome to <span className="font-semibold text-foreground">BetaDrive Configurator</span>, a powerful utility designed to simplify updating, configuring, and tuning your flight controller.
+          Welcome to <span className="font-semibold text-foreground">BetaDrive Configurator</span>, a powerful utility designed to simplify updating, configuring, and tuning your drive controller.
         </p>
       </div>
 
@@ -29,7 +29,7 @@ const LandingPage = () => {
             </h2>
             <div className="space-y-4 text-sm text-card-foreground/80">
               <p>
-                The application supports all hardware that runs BetaDrive. Check the flash tab for a full list of supported flight controllers.
+                The application supports all hardware that runs BetaDrive. Check the flash tab for a full list of supported drive controllers.
               </p>
               
               <div className="space-y-2 pt-2">

@@ -12,6 +12,7 @@ export interface UartConfig {
   rx: number;
   tx: number;
   baudrate: number;
+  type: "GENERIC" | "RECEIVER" | "GPS";
 }
 
 export interface ReceiverData {
@@ -28,6 +29,43 @@ export interface ReceiverData {
   downlinkSNR: number;
 }
 
+export interface GpsData {
+  fix: boolean;
+  numSatellites: number;
+  altitude: number; // meters
+  speed: number; // cm/s
+  headingImu: number;
+  headingGps: number;
+  latitude: number;
+  longitude: number;
+  distToHome: number;
+  dop: number;
+  satellites: GpsSatellite[];
+}
+
+export interface GpsSatellite {
+  gnssId: string;
+  satId: number;
+  signalStrength: number; // 0-100? or dB
+  status: "used" | "unused";
+  quality: "fully locked" | "searching" | "unusable" | "code locked";
+}
+
+export interface ReceiverSettings {
+  telemetry: boolean;
+  rssiAdc: boolean;
+  rssiChannel: number;
+  channelMap: string;
+  rcMin: number;
+  rcMid: number;
+  rcMax: number;
+  deadbandRc: number;
+  deadbandYaw: number;
+  deadbandThr3d: number;
+  rcSmoothing: boolean;
+  rcSmoothingCoeff: number;
+}
+
 export function useSerial() {
   const [connected, setConnected] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
@@ -35,6 +73,8 @@ export function useSerial() {
   const [uartConfigs, setUartConfigs] = useState<UartConfig[]>([]);
   const [receiverData, setReceiverData] = useState<ReceiverData | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [gpsData, setGpsData] = useState<GpsData | null>(null);
+  const [receiverSettings, setReceiverSettings] = useState<ReceiverSettings | null>(null);
   
   const portRef = useRef<any>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
@@ -56,17 +96,18 @@ export function useSerial() {
         board = "esp32c3";
       }
 
-      // Parse CSV line: U<id>,<ENABLED|DISABLED>,<RX>,<TX>,<BAUD>
-      // Example: U1,ENABLED,4,5,115200 or U1,DISABLED,-1,-1,9600
-      const csvMatch = line.match(/^U(\d+),(ENABLED|DISABLED),(-?\d+),(-?\d+),(\d+)$/i);
+      // Parse CSV line: U<id>,<ENABLED|DISABLED>,<RX>,<TX>,<BAUD>,<TYPE>
+      // Example: U1,ENABLED,4,5,115200,RECEIVER
+      const csvMatch = line.match(/^U(\d+),(ENABLED|DISABLED),(-?\d+),(-?\d+),(\d+)(?:,([A-Z]+))?$/i);
       if (csvMatch) {
-        const [, idStr, statusStr, rxStr, txStr, baudStr] = csvMatch;
+        const [, idStr, statusStr, rxStr, txStr, baudStr, typeStr] = csvMatch;
         const newConfig: UartConfig = {
           id: parseInt(idStr),
           enabled: statusStr.toUpperCase() === "ENABLED",
           rx: parseInt(rxStr),
           tx: parseInt(txStr),
-          baudrate: parseInt(baudStr)
+          baudrate: parseInt(baudStr),
+          type: (typeStr || "GENERIC").toUpperCase() as any
         };
         
         setUartConfigs(prev => {
@@ -76,6 +117,68 @@ export function useSerial() {
           }
           return [...prev, newConfig].sort((a, b) => a.id - b.id);
         });
+        continue;
+      }
+
+      // Parse GPS Data: GPS_FULL,fix,sats,lat,lon,alt,speed,course,hdop
+      if (line.startsWith("GPS_FULL,")) {
+        const parts = line.split(",");
+        if (parts.length >= 9) {
+          const fix = parts[1] === "1";
+          const numSat = parseInt(parts[2]) || 0;
+          const lat = parseFloat(parts[3]) || 0;
+          const lon = parseFloat(parts[4]) || 0;
+          const alt = parseFloat(parts[5]) || 0;
+          const spd = parseFloat(parts[6]) || 0;
+          const hdg = parseFloat(parts[7]) || 0;
+          const dop = parseFloat(parts[8]) || 0;
+          const base = Math.max(0, Math.min(100, Math.round(100 / Math.max(1, dop))));
+          const sats =
+            numSat > 0
+              ? Array.from({ length: numSat }).map((_, i) => ({
+                  gnssId: "GPS",
+                  satId: i + 1,
+                  signalStrength: Math.max(10, Math.min(100, base - i * 3)),
+                  status: fix ? "used" : "unused",
+                  quality: fix ? "fully locked" : "searching",
+                }))
+              : [];
+          setGpsData({
+            fix,
+            numSatellites: numSat,
+            latitude: lat,
+            longitude: lon,
+            altitude: alt,
+            speed: spd,
+            headingGps: hdg,
+            dop,
+            headingImu: 0,
+            distToHome: 0,
+            satellites: sats,
+          });
+        }
+        continue;
+      }
+
+      // Parse RX settings: RX_SETTINGS,telemetry,rssi_adc,rssi_ch,map,rcmin,rcmid,rcmax,db_rc,db_yaw,db_thr3d,rc_smooth,rc_coeff
+      if (line.startsWith("RX_SETTINGS,")) {
+        const parts = line.split(",");
+        if (parts.length >= 14) {
+          setReceiverSettings({
+            telemetry: parts[1] === "1",
+            rssiAdc: parts[2] === "1",
+            rssiChannel: parseInt(parts[3]) || -1,
+            channelMap: parts[4],
+            rcMin: parseInt(parts[5]) || 1000,
+            rcMid: parseInt(parts[6]) || 1500,
+            rcMax: parseInt(parts[7]) || 2000,
+            deadbandRc: parseInt(parts[8]) || 0,
+            deadbandYaw: parseInt(parts[9]) || 0,
+            deadbandThr3d: parseInt(parts[10]) || 0,
+            rcSmoothing: parts[11] === "1",
+            rcSmoothingCoeff: parseInt(parts[12]) || 30,
+          });
+        }
         continue;
       }
 
@@ -325,5 +428,10 @@ export function useSerial() {
     }
   }, [readLoop, send]);
 
-  return { connected, deviceInfo, lastSent, uartConfigs, receiverData, logs, connect, disconnect, send };
+  useEffect(() => {
+    // Mock GPS data disabled, real parsing implemented
+    // if (connected) { ... }
+  }, [connected]);
+
+  return { connected, deviceInfo, lastSent, uartConfigs, receiverData, gpsData, receiverSettings, logs, connect, disconnect, send };
 }
