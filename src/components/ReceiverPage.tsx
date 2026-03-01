@@ -14,19 +14,19 @@ const ChannelBar = ({ label, value, color, accent }: { label: string; value: num
   const barWidth = Math.abs(percentage - center);
 
   return (
-    <div className="flex items-center gap-2 group">
-      <div className={`w-[72px] text-right font-mono text-[11px] shrink-0 ${accent ? 'text-foreground font-semibold' : 'text-muted-foreground'}`}>
+    <div className="flex items-center gap-3">
+      <div className={`w-[80px] text-right font-mono text-xs shrink-0 ${accent ? 'text-foreground font-bold' : 'text-muted-foreground font-medium'}`}>
         {label}
       </div>
-      <div className="flex-1 h-[18px] bg-[hsl(0,0%,10%)] rounded-sm overflow-hidden relative border border-border/30">
+      <div className="flex-1 h-7 bg-[hsl(0,0%,10%)] rounded-md overflow-hidden relative border border-border/40">
         {/* Center line */}
-        <div className="absolute top-0 bottom-0 left-1/2 w-px bg-border/40 z-10" />
+        <div className="absolute top-0 bottom-0 left-1/2 w-px bg-border/50 z-10" />
         {/* Bar from center */}
         <div
-          className={`absolute top-0 bottom-0 transition-all duration-75 ease-out rounded-sm ${color}`}
+          className={`absolute top-0.5 bottom-0.5 transition-all duration-75 ease-out rounded ${color}`}
           style={{ left: `${barLeft}%`, width: `${barWidth}%` }}
         />
-        <div className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-foreground/90 font-mono z-20 drop-shadow-sm">
+        <div className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-foreground font-mono z-20 drop-shadow-sm">
           {value}
         </div>
       </div>
@@ -116,19 +116,19 @@ const ReceiverPage = ({ data, onSend }: ReceiverPageProps) => {
             </div>
           </div>
 
-          <div className="p-4 space-y-1 overflow-y-auto flex-1">
+          <div className="p-4 space-y-2 overflow-y-auto flex-1">
             {/* Primary axes */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-2">
               <ChannelBar label="Roll [A]" value={channels[0]} color={COLORS.roll} accent />
               <ChannelBar label="Pitch [E]" value={channels[1]} color={COLORS.pitch} accent />
               <ChannelBar label="Yaw [R]" value={channels[2]} color={COLORS.yaw} accent />
               <ChannelBar label="Throt [T]" value={channels[3]} color={COLORS.throttle} accent />
             </div>
 
-            <div className="border-t border-border/20 my-2" />
+            <div className="border-t border-border/20 my-3" />
 
             {/* AUX channels */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-2">
               {channels.slice(4).map((val, idx) => (
                 <ChannelBar
                   key={`aux-${idx}`}
