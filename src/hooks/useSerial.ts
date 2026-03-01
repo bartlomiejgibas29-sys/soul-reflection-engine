@@ -179,6 +179,42 @@ export function useSerial() {
     }
   }, [parseBoardResponse]);
 
+  const disconnect = useCallback(async () => {
+    try {
+      console.log("Rozłączanie...");
+      
+      if (readerRef.current) {
+        try {
+          await readerRef.current.cancel();
+        } catch (e) {
+          console.log("Reader cancel error (już zamknięty?)");
+        }
+        readerRef.current = null;
+      }
+      
+      if (portRef.current) {
+        try {
+          if (portRef.current.readable || portRef.current.writable) {
+            await portRef.current.close();
+          }
+        } catch (e) {
+          console.log("Port close error:", e);
+        }
+        portRef.current = null;
+      }
+    } catch (err) {
+      console.error("Błąd podczas rozłączania:", err);
+    }
+    
+    setConnected(false);
+    setDeviceInfo(null);
+    setUartConfigs([]);
+    setReceiverData(null);
+    setLastSent("Disconnected");
+    setLogs(prev => [...prev, `[System] Disconnected\n`]);
+    bufferRef.current = "";
+  }, []);
+
   const connect = useCallback(async (baudRate: number = 115200) => {
     let openTimeout: any = null;
     try {
@@ -187,7 +223,6 @@ export function useSerial() {
         return;
       }
 
-      // Najpierw rozłącz jeśli już połączony
       if (connected) {
         await disconnect();
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -195,7 +230,6 @@ export function useSerial() {
 
       const port = await (navigator as any).serial.requestPort();
       
-      // Dodaj timeout dla otwierania portu
       openTimeout = setTimeout(() => {
         throw new Error("Timeout podczas otwierania portu szeregowego");
       }, 5000);
@@ -219,7 +253,6 @@ export function useSerial() {
         readLoop(reader);
       }
 
-      // Poczekaj na stabilizację i wyślij komendy
       setTimeout(() => {
         send("PIN_TABLE");
       }, 1000);
@@ -233,7 +266,6 @@ export function useSerial() {
       if (err.name === "SecurityError") {
         alert("Web Serial is blocked in an iframe. Open the page in a new tab.");
       } else if (err.name === "NotFoundError") {
-        // Użytkownik anulował wybór portu - nie pokazuj błędu
         console.log("User cancelled port selection");
       } else if (err.name === "NetworkError") {
         alert("Port szeregowy jest już używany przez inną aplikację lub nie jest dostępny.");
@@ -244,13 +276,11 @@ export function useSerial() {
         alert("Błąd połączenia: " + err.message);
       }
       
-      // Wyczyść stan po błędzie
       setConnected(false);
       portRef.current = null;
     }
   }, [readLoop, send, connected, disconnect]);
 
-  // Auto-connect logic
   useEffect(() => {
     const shouldConnect = localStorage.getItem("shouldAutoConnect");
     if (shouldConnect === "true") {
@@ -260,7 +290,6 @@ export function useSerial() {
       (async () => {
         if (!("serial" in navigator)) return;
         
-        // Poczekaj 2 sekundy na restart urządzenia
         await new Promise(resolve => setTimeout(resolve, 2000));
         
         try {
@@ -280,7 +309,6 @@ export function useSerial() {
               readLoop(reader);
             }
             
-            // Poczekaj chwilę i poproś o konfigurację
             setTimeout(() => {
               send("PIN_TABLE");
             }, 500);
@@ -291,53 +319,11 @@ export function useSerial() {
         } catch (err) {
           console.error("Auto-connect error:", err);
           setLogs(prev => [...prev, `Auto-connect error: ${err}\n`]);
-          
-          // Jeśli nie udało się połączyć, wyczyść flagę
           localStorage.removeItem("shouldAutoConnect");
         }
       })();
     }
   }, [readLoop, send]);
-
-  const disconnect = useCallback(async () => {
-    try {
-      console.log("Rozłączanie...");
-      
-      if (readerRef.current) {
-        try {
-          await readerRef.current.cancel();
-        } catch (e) {
-          console.log("Reader cancel error (już zamknięty?)");
-        }
-        readerRef.current = null;
-      }
-      
-      if (portRef.current) {
-        try {
-          // Sprawdź czy port jest jeszcze otwarty
-          if (portRef.current.readable || portRef.current.writable) {
-            await portRef.current.close();
-          }
-        } catch (e) {
-          console.log("Port close error:", e);
-        }
-        portRef.current = null;
-      }
-    } catch (err) {
-      console.error("Błąd podczas rozłączania:", err);
-    }
-    
-    // Wyczyść stan
-    setConnected(false);
-    setDeviceInfo(null);
-    setUartConfigs([]);
-    setReceiverData(null);
-    setLastSent("Disconnected");
-    setLogs(prev => [...prev, `[System] Disconnected\n`]);
-    
-    // Wyczyść buffor
-    bufferRef.current = "";
-  }, []);
 
   return { connected, deviceInfo, lastSent, uartConfigs, receiverData, logs, connect, disconnect, send };
 }
