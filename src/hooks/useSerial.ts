@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 interface DeviceInfo {
   configurator?: string;
@@ -6,42 +6,102 @@ interface DeviceInfo {
   target?: string;
 }
 
-export interface PinConfig {
-  uart: string;
-  specification: string;
+export interface UartConfig {
+  id: number;
+  enabled: boolean;
+  rx: number;
+  tx: number;
+  baudrate: number;
+}
+
+export interface ReceiverData {
+  channels: number[]; // 1-16
+  uplinkRSS1: number;
+  uplinkRSS2: number;
+  uplinkLQ: number;
+  uplinkSNR: number;
+  activeAntenna: number;
+  rfMode: number;
+  uplinkTXPower: number;
+  downlinkRSSI: number;
+  downlinkLQ: number;
+  downlinkSNR: number;
 }
 
 export function useSerial() {
   const [connected, setConnected] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   const [lastSent, setLastSent] = useState<string>("");
-  const [pinConfigs, setPinConfigs] = useState<Record<number, PinConfig> | null>(null);
+  const [uartConfigs, setUartConfigs] = useState<UartConfig[]>([]);
+  const [receiverData, setReceiverData] = useState<ReceiverData | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
+  
   const portRef = useRef<any>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
-  const writerRef = useRef<WritableStreamDefaultWriter<Uint8Array> | null>(null);
   const bufferRef = useRef<string>("");
 
   const parseBoardResponse = useCallback((data: string) => {
     const lines = data.split("\n").map(l => l.trim()).filter(Boolean);
     let board = "";
-    const configs: Record<number, PinConfig> = {};
-
+    
+    // We will collect UART configs here
+    // But since data comes in chunks, we might receive partial CSV or updates
+    // For simplicity, we parse line by line and update state if it matches CSV format
+    
     for (const line of lines) {
-      // First line or line matching board name
-      if (/^esp32/i.test(line)) {
-        board = line.toLowerCase();
+      // Check for board info
+      if (/^ESP-ROM:/i.test(line)) {
+        board = line.replace(/^ESP-ROM:/i, "").trim();
+      } else if (/^=== SYSTEM START ===/i.test(line) || /^=== SYSTEM UART MULTIPLEXER ===/i.test(line)) {
+        board = "esp32c3";
+      }
+
+      // Parse CSV line: U<id>,<ENABLED|DISABLED>,<RX>,<TX>,<BAUD>
+      // Example: U1,ENABLED,4,5,115200 or U1,DISABLED,-1,-1,9600
+      const csvMatch = line.match(/^U(\d+),(ENABLED|DISABLED),(-?\d+),(-?\d+),(\d+)$/i);
+      if (csvMatch) {
+        const [, idStr, statusStr, rxStr, txStr, baudStr] = csvMatch;
+        const newConfig: UartConfig = {
+          id: parseInt(idStr),
+          enabled: statusStr.toUpperCase() === "ENABLED",
+          rx: parseInt(rxStr),
+          tx: parseInt(txStr),
+          baudrate: parseInt(baudStr)
+        };
+        
+        setUartConfigs(prev => {
+          const exists = prev.find(c => c.id === newConfig.id);
+          if (exists) {
+            return prev.map(c => c.id === newConfig.id ? newConfig : c);
+          }
+          return [...prev, newConfig].sort((a, b) => a.id - b.id);
+        });
         continue;
       }
-      // Format: PIN0:UART1:RX or PIN20:None:None
-      const match = line.match(/^PIN(\d+):([^:]+):([^:]+)$/i);
-      if (match) {
-        const pin = parseInt(match[1]);
-        const uart = match[2].trim();
-        const spec = match[3].trim();
-        configs[pin] = {
-          uart: uart === "None" ? "None" : uart.replace("UART", "UART(") + ")",
-          specification: spec,
-        };
+
+      // Parse ELRS Data: ELRS_FULL,ch1...ch16,stats...
+      if (line.startsWith("ELRS_FULL,")) {
+          const parts = line.split(",");
+          // ELRS_FULL is index 0. channels 1-16 are indices 1-16. stats are 17-26
+          if (parts.length >= 27) {
+              const channels = parts.slice(1, 17).map(Number);
+              const stats = parts.slice(17).map(Number);
+              
+              setReceiverData({
+                  channels,
+                  uplinkRSS1: stats[0],
+                  uplinkRSS2: stats[1],
+                  uplinkLQ: stats[2],
+                  uplinkSNR: stats[3],
+                  activeAntenna: stats[4],
+                  rfMode: stats[5],
+                  uplinkTXPower: stats[6],
+                  downlinkRSSI: stats[7],
+                  downlinkLQ: stats[8],
+                  downlinkSNR: stats[9]
+              });
+          }
+          continue;
       }
     }
 
@@ -52,113 +112,232 @@ export function useSerial() {
         target: board,
       });
     }
+  }, []);
 
-    if (Object.keys(configs).length > 0) {
-      setPinConfigs(configs);
+  const send = useCallback(async (data: string) => {
+    if (!portRef.current || !portRef.current.writable) return;
+    
+    try {
+        const writer = portRef.current.writable.getWriter();
+        const encoded = new TextEncoder().encode(data + "\n");
+        await writer.write(encoded);
+        writer.releaseLock();
+        
+        setLastSent(`TX: ${data}`);
+        setLogs(prev => [...prev, `> ${data}\n`]);
+    } catch (err) {
+        console.error("Send error:", err);
+        setLogs(prev => [...prev, `Error sending: ${err}\n`]);
     }
   }, []);
 
-  const connect = useCallback(async () => {
+  const readLoop = useCallback(async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          console.log("Serial read completed normally");
+          break;
+        }
+        
+        if (!value || value.length === 0) {
+          continue; // Pusta ramka, kontynuuj
+        }
+        
+        const text = new TextDecoder().decode(value);
+        
+        setLogs(prev => {
+            const newLogs = [...prev, text];
+            return newLogs.slice(-2000); 
+        });
+        
+        bufferRef.current += text;
+        let idx = bufferRef.current.indexOf("\n");
+        while (idx !== -1) {
+          const line = bufferRef.current.slice(0, idx + 1);
+          parseBoardResponse(line);
+          bufferRef.current = bufferRef.current.slice(idx + 1);
+          idx = bufferRef.current.indexOf("\n");
+        }
+      }
+    } catch (err) {
+      if (err.name === 'AbortError' || err.message?.includes('cancel')) {
+        console.log("Serial read cancelled by user");
+      } else if (err.name === 'NetworkError' || err.message?.includes('break')) {
+        console.log("Serial connection broken - device may have reset");
+        setLogs(prev => [...prev, `[System] Connection lost - device may have reset\n`]);
+      } else {
+        console.error("Serial read error:", err);
+        setLogs(prev => [...prev, `Serial read error: ${err.message}\n`]);
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch (e) {
+        console.log("Reader already released");
+      }
+    }
+  }, [parseBoardResponse]);
+
+  const connect = useCallback(async (baudRate: number = 115200) => {
+    let openTimeout: any = null;
     try {
       if (!("serial" in navigator)) {
-        alert("Web Serial API niedostępne. Otwórz stronę bezpośrednio w Chrome/Edge (nie w iframe).");
+        alert("Web Serial API is unavailable. Open this page directly in Chrome/Edge (not in an iframe).");
         return;
       }
 
+      // Najpierw rozłącz jeśli już połączony
+      if (connected) {
+        await disconnect();
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
       const port = await (navigator as any).serial.requestPort();
-      await port.open({ baudRate: 115200 });
+      
+      // Dodaj timeout dla otwierania portu
+      openTimeout = setTimeout(() => {
+        throw new Error("Timeout podczas otwierania portu szeregowego");
+      }, 5000);
+      
+      await port.open({ baudRate });
+      if (openTimeout) {
+        clearTimeout(openTimeout);
+        openTimeout = null;
+      }
+      
       portRef.current = port;
       setConnected(true);
-      setLastSent("Połączono z portem szeregowym");
+      setLastSent("Connected to serial port");
+      setLogs(prev => [...prev, `[System] Connected at ${baudRate} baud\n`]);
+      localStorage.setItem("lastBaudRate", baudRate.toString());
       bufferRef.current = "";
 
-      port.addEventListener("disconnect", () => {
-        setConnected(false);
-        setDeviceInfo(null);
-        setPinConfigs(null);
-        setLastSent("Urządzenie odłączone");
-        portRef.current = null;
-        readerRef.current = null;
-        writerRef.current = null;
-      });
-
-      // Writer
-      const writer = port.writable?.getWriter();
-      if (writer) writerRef.current = writer;
-
-      // Reader
-      const reader = port.readable?.getReader();
-      if (reader) {
+      if (port.readable) {
+        const reader = port.readable.getReader();
         readerRef.current = reader;
         readLoop(reader);
       }
 
-      // Send REBOOT to identify the board
-      if (writer) {
-        const encoded = new TextEncoder().encode("REBOOT\n");
-        await writer.write(encoded);
-        setLastSent("TX: REBOOT");
-      }
+      // Poczekaj na stabilizację i wyślij komendy
+      setTimeout(() => {
+        send("PIN_TABLE");
+      }, 1000);
+
     } catch (err: any) {
+      if (openTimeout) {
+        clearTimeout(openTimeout);
+        openTimeout = null;
+      }
+      
       if (err.name === "SecurityError") {
-        alert("Web Serial jest zablokowane w iframe. Otwórz stronę w nowej karcie.");
-      } else if (err.name !== "NotFoundError") {
+        alert("Web Serial is blocked in an iframe. Open the page in a new tab.");
+      } else if (err.name === "NotFoundError") {
+        // Użytkownik anulował wybór portu - nie pokazuj błędu
+        console.log("User cancelled port selection");
+      } else if (err.name === "NetworkError") {
+        alert("Port szeregowy jest już używany przez inną aplikację lub nie jest dostępny.");
+        setLogs(prev => [...prev, `[Error] Port unavailable - may be in use by another application\n`]);
+      } else {
         console.error("Serial connection error:", err);
+        setLogs(prev => [...prev, `Connection error: ${err.message}\n`]);
+        alert("Błąd połączenia: " + err.message);
       }
+      
+      // Wyczyść stan po błędzie
+      setConnected(false);
+      portRef.current = null;
     }
-  }, []);
+  }, [readLoop, send, connected, disconnect]);
 
-  const readLoop = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
-    try {
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        const text = new TextDecoder().decode(value);
-        console.log("[Serial RX]:", text);
+  // Auto-connect logic
+  useEffect(() => {
+    const shouldConnect = localStorage.getItem("shouldAutoConnect");
+    if (shouldConnect === "true") {
+      localStorage.removeItem("shouldAutoConnect");
+      const lastBaud = parseInt(localStorage.getItem("lastBaudRate") || "115200");
+      
+      (async () => {
+        if (!("serial" in navigator)) return;
         
-        // Buffer incoming data and parse when we get END marker or enough data
-        bufferRef.current += text;
-        if (bufferRef.current.includes("END")) {
-          const fullResponse = bufferRef.current.split("END")[0];
-          parseBoardResponse(fullResponse);
-          bufferRef.current = "";
+        // Poczekaj 2 sekundy na restart urządzenia
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        try {
+          const ports = await (navigator as any).serial.getPorts();
+          if (ports.length > 0) {
+            const port = ports[0];
+            await port.open({ baudRate: lastBaud });
+            portRef.current = port;
+            setConnected(true);
+            setLastSent("Auto-connected after restart");
+            setLogs(prev => [...prev, `[System] Auto-connected at ${lastBaud} baud after restart\n`]);
+            bufferRef.current = "";
+            
+            if (port.readable) {
+              const reader = port.readable.getReader();
+              readerRef.current = reader;
+              readLoop(reader);
+            }
+            
+            // Poczekaj chwilę i poproś o konfigurację
+            setTimeout(() => {
+              send("PIN_TABLE");
+            }, 500);
+          } else {
+            console.log("No serial ports available for auto-connect");
+            setLogs(prev => [...prev, `[System] No serial ports available for auto-connect\n`]);
+          }
+        } catch (err) {
+          console.error("Auto-connect error:", err);
+          setLogs(prev => [...prev, `Auto-connect error: ${err}\n`]);
+          
+          // Jeśli nie udało się połączyć, wyczyść flagę
+          localStorage.removeItem("shouldAutoConnect");
         }
-      }
-    } catch (err) {
-      console.log("Serial read ended:", err);
+      })();
     }
-  };
-
-  const send = useCallback(async (data: string) => {
-    if (writerRef.current) {
-      const encoded = new TextEncoder().encode(data + "\n");
-      await writerRef.current.write(encoded);
-      setLastSent(`TX: ${data}`);
-    }
-  }, []);
+  }, [readLoop, send]);
 
   const disconnect = useCallback(async () => {
     try {
+      console.log("Rozłączanie...");
+      
       if (readerRef.current) {
-        await readerRef.current.cancel();
+        try {
+          await readerRef.current.cancel();
+        } catch (e) {
+          console.log("Reader cancel error (już zamknięty?)");
+        }
         readerRef.current = null;
       }
-      if (writerRef.current) {
-        writerRef.current.releaseLock();
-        writerRef.current = null;
-      }
+      
       if (portRef.current) {
-        await portRef.current.close();
+        try {
+          // Sprawdź czy port jest jeszcze otwarty
+          if (portRef.current.readable || portRef.current.writable) {
+            await portRef.current.close();
+          }
+        } catch (e) {
+          console.log("Port close error:", e);
+        }
         portRef.current = null;
       }
     } catch (err) {
-      console.error("Disconnect error:", err);
+      console.error("Błąd podczas rozłączania:", err);
     }
+    
+    // Wyczyść stan
     setConnected(false);
     setDeviceInfo(null);
-    setPinConfigs(null);
-    setLastSent("Rozłączono");
+    setUartConfigs([]);
+    setReceiverData(null);
+    setLastSent("Disconnected");
+    setLogs(prev => [...prev, `[System] Disconnected\n`]);
+    
+    // Wyczyść buffor
+    bufferRef.current = "";
   }, []);
 
-  return { connected, deviceInfo, lastSent, pinConfigs, connect, disconnect, send };
+  return { connected, deviceInfo, lastSent, uartConfigs, receiverData, logs, connect, disconnect, send };
 }
