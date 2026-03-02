@@ -168,13 +168,12 @@ const GpsPage = ({ data, onSend }: GpsPageProps) => {
         </div>
         <div className="flex-1">
           {data && data.fix ? (
+            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             <MapContainer
-              center={[data.latitude, data.longitude]}
-              zoom={18}
-              className="w-full h-full"
+              {...({ center: [data.latitude, data.longitude], zoom: 18, className: "w-full h-full" } as any)}
             >
               <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" />
-              <CircleMarker center={[data.latitude, data.longitude]} radius={10} pathOptions={{ color: "#f59e0b" }} />
+              <CircleMarker {...({ center: [data.latitude, data.longitude], radius: 10, pathOptions: { color: "#f59e0b" } } as any)} />
             </MapContainer>
           ) : (
             <div className="flex items-center justify-center w-full h-full bg-neutral-900">
