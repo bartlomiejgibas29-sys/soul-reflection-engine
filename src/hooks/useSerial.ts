@@ -52,9 +52,6 @@ export interface GpsSatellite {
 }
 
 export interface ReceiverSettings {
-  telemetry: boolean;
-  rssiAdc: boolean;
-  rssiChannel: number;
   channelMap: string;
   rcMin: number;
   rcMid: number;
@@ -64,6 +61,19 @@ export interface ReceiverSettings {
   deadbandThr3d: number;
   rcSmoothing: boolean;
   rcSmoothingCoeff: number;
+  steeringChannel: number;
+  throttleChannel: number;
+  steeringRev: boolean;
+  throttleRev: boolean;
+}
+
+export interface GpsSettings {
+  protocol: string;
+  autoConfig: boolean;
+  useGalileo: boolean;
+  setHomeOnce: boolean;
+  groundAssistance: string;
+  declination: number;
 }
 
 export function useSerial() {
@@ -75,6 +85,7 @@ export function useSerial() {
   const [logs, setLogs] = useState<string[]>([]);
   const [gpsData, setGpsData] = useState<GpsData | null>(null);
   const [receiverSettings, setReceiverSettings] = useState<ReceiverSettings | null>(null);
+  const [gpsSettings, setGpsSettings] = useState<GpsSettings | null>(null);
   
   const portRef = useRef<any>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
@@ -96,27 +107,24 @@ export function useSerial() {
         board = "esp32c3";
       }
 
-      // Parse CSV line: U<id>,<ENABLED|DISABLED>,<RX>,<TX>,<BAUD>,<TYPE>
-      // Example: U1,ENABLED,4,5,115200,RECEIVER
-      const csvMatch = line.match(/^U(\d+),(ENABLED|DISABLED),(-?\d+),(-?\d+),(\d+)(?:,([A-Z]+))?$/i);
-      if (csvMatch) {
-        const [, idStr, statusStr, rxStr, txStr, baudStr, typeStr] = csvMatch;
-        const newConfig: UartConfig = {
-          id: parseInt(idStr),
-          enabled: statusStr.toUpperCase() === "ENABLED",
-          rx: parseInt(rxStr),
-          tx: parseInt(txStr),
-          baudrate: parseInt(baudStr),
-          type: (typeStr || "GENERIC").toUpperCase() as any
-        };
-        
-        setUartConfigs(prev => {
-          const exists = prev.find(c => c.id === newConfig.id);
-          if (exists) {
-            return prev.map(c => c.id === newConfig.id ? newConfig : c);
-          }
-          return [...prev, newConfig].sort((a, b) => a.id - b.id);
-        });
+      // Parse UART config: UART_CONF,id,enabled,rx,tx,baud,type
+      if (line.startsWith("UART_CONF,")) {
+        const parts = line.split(",");
+        const id = parseInt(parts[1]);
+        if (id >= 1 && id <= 3) {
+          setUartConfigs(prev => {
+            const next = [...prev];
+            next[id-1] = {
+              id,
+              enabled: parts[2] === "ENABLED",
+              rx: parseInt(parts[3]),
+              tx: parseInt(parts[4]),
+              baudrate: parseInt(parts[5]),
+              type: parts[6] as any
+            };
+            return next;
+          });
+        }
         continue;
       }
 
@@ -139,8 +147,8 @@ export function useSerial() {
                   gnssId: "GPS",
                   satId: i + 1,
                   signalStrength: Math.max(10, Math.min(100, base - i * 3)),
-                  status: fix ? ("used" as const) : ("unused" as const),
-                  quality: fix ? ("fully locked" as const) : ("searching" as const),
+                  status: fix ? "used" : "unused",
+                  quality: fix ? "fully locked" : "searching",
                 }))
               : [];
           setGpsData({
@@ -160,23 +168,40 @@ export function useSerial() {
         continue;
       }
 
-      // Parse RX settings: RX_SETTINGS,telemetry,rssi_adc,rssi_ch,map,rcmin,rcmid,rcmax,db_rc,db_yaw,db_thr3d,rc_smooth,rc_coeff
+      // Parse RX settings: RX_SETTINGS,map,rcmin,rcmid,rcmax,db_rc,db_yaw,db_thr3d,rc_smooth,rc_coeff,steer_ch,thr_ch,steer_rev,thr_rev
       if (line.startsWith("RX_SETTINGS,")) {
         const parts = line.split(",");
         if (parts.length >= 14) {
           setReceiverSettings({
-            telemetry: parts[1] === "1",
-            rssiAdc: parts[2] === "1",
-            rssiChannel: parseInt(parts[3]) || -1,
-            channelMap: parts[4],
-            rcMin: parseInt(parts[5]) || 1000,
-            rcMid: parseInt(parts[6]) || 1500,
-            rcMax: parseInt(parts[7]) || 2000,
-            deadbandRc: parseInt(parts[8]) || 0,
-            deadbandYaw: parseInt(parts[9]) || 0,
-            deadbandThr3d: parseInt(parts[10]) || 0,
-            rcSmoothing: parts[11] === "1",
-            rcSmoothingCoeff: parseInt(parts[12]) || 30,
+            channelMap: parts[1],
+            rcMin: parseInt(parts[2]) || 1000,
+            rcMid: parseInt(parts[3]) || 1500,
+            rcMax: parseInt(parts[4]) || 2000,
+            deadbandRc: parseInt(parts[5]) || 0,
+            deadbandYaw: parseInt(parts[6]) || 0,
+            deadbandThr3d: parseInt(parts[7]) || 0,
+            rcSmoothing: parts[8] === "1",
+            rcSmoothingCoeff: parseInt(parts[9]) || 30,
+            steeringChannel: parseInt(parts[10]) || 1,
+            throttleChannel: parseInt(parts[11]) || 2,
+            steeringRev: parts[12] === "1",
+            throttleRev: parts[13] === "1",
+          });
+        }
+        continue;
+      }
+
+      // Parse GPS settings: GPS_SETTINGS,protocol,auto,galileo,home,assist,decl
+      if (line.startsWith("GPS_SETTINGS,")) {
+        const parts = line.split(",");
+        if (parts.length >= 7) {
+          setGpsSettings({
+            protocol: parts[1],
+            autoConfig: parts[2] === "1",
+            useGalileo: parts[3] === "1",
+            setHomeOnce: parts[4] === "1",
+            groundAssistance: parts[5],
+            declination: parseFloat(parts[6]) || 0.0,
           });
         }
         continue;
@@ -356,9 +381,10 @@ export function useSerial() {
         readLoop(reader);
       }
 
+      // Send FULL_CONFIG request immediately after connection
       setTimeout(() => {
-        send("PIN_TABLE");
-      }, 1000);
+        send("FULL_CONFIG");
+      }, 500);
 
     } catch (err: any) {
       if (openTimeout) {
@@ -433,5 +459,16 @@ export function useSerial() {
     // if (connected) { ... }
   }, [connected]);
 
-  return { connected, deviceInfo, lastSent, uartConfigs, receiverData, gpsData, receiverSettings, logs, connect, disconnect, send };
+  const reboot = useCallback(async () => {
+    await send("REBOOT");
+    // Daj czas na wysłanie komendy i restart ESP
+    setTimeout(async () => {
+      await disconnect();
+      // Opcjonalnie: można spróbować auto-reconnect po np. 3 sekundach, 
+      // ale przeglądarki często wymagają gestu użytkownika do ponownego otwarcia portu.
+      // Lepiej po prostu rozłączyć i pozwolić użytkownikowi kliknąć Connect.
+    }, 500);
+  }, [disconnect, send]);
+
+  return { connected, deviceInfo, lastSent, uartConfigs, receiverData, gpsData, receiverSettings, gpsSettings, logs, connect, disconnect, send, reboot };
 }

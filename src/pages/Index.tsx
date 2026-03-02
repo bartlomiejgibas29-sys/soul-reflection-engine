@@ -18,7 +18,19 @@ const Index = () => {
       return "Setup";
     }
   });
-  const { connected, deviceInfo, lastSent, uartConfigs, receiverData, receiverSettings, gpsData, logs, connect, disconnect, send } = useSerial();
+  const { connected, deviceInfo, lastSent, uartConfigs, receiverData, receiverSettings, gpsData, gpsSettings, logs, connect, disconnect, send, reboot } = useSerial();
+
+  useEffect(() => {
+    if (!connected) {
+      setActiveTab("Setup"); 
+    }
+  }, [connected]);
+
+  // Handle Save & Reboot from children
+  const handleReboot = () => {
+    reboot();
+    // Toast notification would be nice here
+  };
 
   useEffect(() => {
     try {
@@ -51,18 +63,13 @@ const Index = () => {
               <h1 className="text-2xl font-light text-foreground mb-4 shrink-0">{activeTab}</h1>
               
               <div className="flex-1 overflow-y-auto min-h-0">
-                {activeTab === "Setup" && (
-                  <SetupPage 
-                    onStatus={() => send("STATUS")}
-                    onResetSettings={() => send("HARD RESET")}
-                  />
-                )}
+                {activeTab === "Setup" && <SetupPage uartConfigs={uartConfigs} onSend={send} onReboot={reboot} />}
                 
                 {activeTab === "Ports" && <PortsPage uartConfigs={uartConfigs} connected={connected} onSend={send} />}
                 
                 {activeTab === "Receiver" && <ReceiverPage data={receiverData} settings={receiverSettings} onSend={send} />}
 
-                {activeTab === "GPS" && <GpsPage data={gpsData} onSend={send} />}
+                {activeTab === "GPS" && <GpsPage data={gpsData} settings={gpsSettings} onSend={send} />}
 
                 {activeTab === "CLI" && (
                   <div className="h-full pb-2">

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { GpsData } from "@/hooks/useSerial";
+import type { GpsData, GpsSettings } from "@/hooks/useSerial";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -8,22 +8,44 @@ import { MapPin, Navigation, Signal } from "lucide-react";
 import { MapContainer, TileLayer, Marker, CircleMarker, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
+
 interface GpsPageProps {
   data: GpsData | null;
+  settings: GpsSettings | null;
   onSend: (data: string) => Promise<void> | void;
 }
 
-const GpsPage = ({ data, onSend }: GpsPageProps) => {
-  // Config state (local for now, ideally from device)
+const GpsPage = ({ data, settings, onSend }: GpsPageProps) => {
+  // Config state
+  const [protocol, setProtocol] = useState("UBLOX");
   const [autoConfig, setAutoConfig] = useState(true);
   const [useGalileo, setUseGalileo] = useState(true);
   const [setHomeOnce, setSetHomeOnce] = useState(true);
-  const [declination, setDeclination] = useState("0,0");
+  const [groundAssist, setGroundAssist] = useState("European");
+  const [declination, setDeclination] = useState("0.0");
+
+  useEffect(() => {
+    if (settings) {
+      setProtocol(settings.protocol);
+      setAutoConfig(settings.autoConfig);
+      setUseGalileo(settings.useGalileo);
+      setSetHomeOnce(settings.setHomeOnce);
+      setGroundAssist(settings.groundAssistance);
+      setDeclination(settings.declination.toString());
+    }
+  }, [settings]);
 
   useEffect(() => {
     onSend("ENABLE_GPS_MODE");
+    onSend("GPS_SETTINGS");
     return () => { onSend("DISABLE_GPS_MODE"); };
   }, []);
+
+  const handleRefresh = () => {
+    onSend("GPS_SETTINGS");
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full overflow-y-auto p-1">
@@ -31,12 +53,17 @@ const GpsPage = ({ data, onSend }: GpsPageProps) => {
       <Card className="p-4 space-y-4 bg-card border-border">
         <div className="flex justify-between items-center border-b border-border pb-2 mb-2">
           <h3 className="font-semibold text-sm text-foreground">GPS Configuration</h3>
-          <span className="text-muted-foreground text-xs">?</span>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleRefresh} title="Refresh Settings">
+            <RefreshCw size={14} />
+          </Button>
         </div>
         
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <Select defaultValue="UBLOX">
+            <Select value={protocol} onValueChange={(v) => {
+              setProtocol(v);
+              onSend(`SET_GPS_PROTOCOL:${v}`);
+            }}>
               <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue placeholder="Protocol" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="UBLOX">UBLOX</SelectItem>
@@ -48,12 +75,18 @@ const GpsPage = ({ data, onSend }: GpsPageProps) => {
           </div>
 
           <div className="flex items-center justify-between">
-            <Switch checked={autoConfig} onCheckedChange={setAutoConfig} />
+            <Switch checked={autoConfig} onCheckedChange={(v) => {
+              setAutoConfig(v);
+              onSend(`SET_GPS_AUTO_CONFIG:${v ? 1 : 0}`);
+            }} />
             <span className="text-xs text-muted-foreground">Auto Config</span>
           </div>
 
           <div className="flex items-center justify-between">
-            <Switch checked={useGalileo} onCheckedChange={setUseGalileo} />
+            <Switch checked={useGalileo} onCheckedChange={(v) => {
+              setUseGalileo(v);
+              onSend(`SET_GPS_GALILEO:${v ? 1 : 0}`);
+            }} />
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Use Galileo</span>
               <span className="text-[10px] text-muted-foreground border rounded px-1">?</span>
@@ -61,7 +94,10 @@ const GpsPage = ({ data, onSend }: GpsPageProps) => {
           </div>
 
           <div className="flex items-center justify-between">
-            <Switch checked={setHomeOnce} onCheckedChange={setSetHomeOnce} />
+            <Switch checked={setHomeOnce} onCheckedChange={(v) => {
+              setSetHomeOnce(v);
+              onSend(`SET_GPS_HOME_ONCE:${v ? 1 : 0}`);
+            }} />
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Set Home Point Once</span>
               <span className="text-[10px] text-muted-foreground border rounded px-1">?</span>
@@ -69,7 +105,10 @@ const GpsPage = ({ data, onSend }: GpsPageProps) => {
           </div>
 
           <div className="flex items-center justify-between">
-            <Select defaultValue="European">
+            <Select value={groundAssist} onValueChange={(v) => {
+              setGroundAssist(v);
+              onSend(`SET_GPS_GROUND_ASSIST:${v}`);
+            }}>
               <SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue placeholder="Type" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="European">European EGNOS</SelectItem>
@@ -84,6 +123,7 @@ const GpsPage = ({ data, onSend }: GpsPageProps) => {
             <Input 
               value={declination} 
               onChange={e => setDeclination(e.target.value)} 
+              onBlur={e => onSend(`SET_GPS_MAG_DECLINATION:${e.target.value}`)}
               className="w-20 h-8 text-xs font-mono text-right"
             />
             <span className="text-xs text-muted-foreground">Magnetometer Declination [deg]</span>
@@ -168,12 +208,13 @@ const GpsPage = ({ data, onSend }: GpsPageProps) => {
         </div>
         <div className="flex-1">
           {data && data.fix ? (
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
             <MapContainer
-              {...({ center: [data.latitude, data.longitude], zoom: 18, className: "w-full h-full" } as any)}
+              center={[data.latitude, data.longitude]}
+              zoom={18}
+              className="w-full h-full"
             >
               <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" />
-              <CircleMarker {...({ center: [data.latitude, data.longitude], radius: 10, pathOptions: { color: "#f59e0b" } } as any)} />
+              <CircleMarker center={[data.latitude, data.longitude]} radius={10} pathOptions={{ color: "#f59e0b" }} />
             </MapContainer>
           ) : (
             <div className="flex items-center justify-center w-full h-full bg-neutral-900">

@@ -12,63 +12,40 @@ import {
 } from "@/components/ui/alert-dialog";
 
 interface SetupPageProps {
-  onStatus: () => void;
-  onResetSettings: () => void;
+  uartConfigs: any[];
+  onSend: (cmd: string) => Promise<void> | void;
+  onReboot: () => Promise<void> | void;
 }
 
-const SetupPage = ({ onStatus, onResetSettings }: SetupPageProps) => {
-  const handleReset = () => {
-    try {
-      onResetSettings();
-      localStorage.setItem("shouldAutoConnect", "true");
-    } catch {}
-    setTimeout(() => {
-      window.location.reload();
-    }, 1000);
-  };
+const SetupPage = ({ uartConfigs, onSend, onReboot }: SetupPageProps) => {
   return (
-    <div className="space-y-6 p-4">
-      <div className="space-y-4">
-        {/* Status Button */}
-        <div className="flex items-center gap-4 p-4 border rounded-lg bg-card">
-          <Button 
-            className="w-48 bg-yellow-500 hover:bg-yellow-600 text-black font-bold"
-            onClick={onStatus}
-          >
-            Status
-          </Button>
-          <p className="text-sm text-muted-foreground">
-            Check system status and sensor health.
-          </p>
-        </div>
-
-        {/* Reset Settings */}
-        <div className="flex items-center gap-4 p-4 border rounded-lg bg-card">
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button className="w-48 bg-yellow-500 hover:bg-yellow-600 text-black font-bold">
-                Reset Settings
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Are you sure you want to reset controller settings?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will restore default settings (HARD RESET). This cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleReset} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                  Reset now
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-          <p className="text-sm text-muted-foreground">
-            Restore settings to default.
-          </p>
-        </div>
+    <div className="flex flex-col h-full gap-4 p-4 overflow-y-auto">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* System Info Card */}
+        <Card className="p-4 space-y-4 bg-card border-border">
+          <div className="flex items-center gap-2 border-b border-border pb-2">
+            <Cpu size={16} className="text-primary" />
+            <h3 className="font-semibold text-sm">System Actions</h3>
+          </div>
+          <div className="space-y-2">
+            <Button 
+              variant="destructive" 
+              className="w-full justify-start text-xs h-8"
+              onClick={() => onReboot()}
+            >
+              <RefreshCw className="mr-2 h-3 w-3" />
+              Save & Reboot
+            </Button>
+            <Button 
+              variant="outline" 
+              className="w-full justify-start text-xs h-8 text-destructive border-destructive/50 hover:bg-destructive/10"
+              onClick={() => onSend("HARD RESET")}
+            >
+              <Trash2 className="mr-2 h-3 w-3" />
+              Factory Reset
+            </Button>
+          </div>
+        </Card>
 
         {/* Backup / Restore */}
         <div className="flex items-center gap-4 p-4 border rounded-lg bg-card">
