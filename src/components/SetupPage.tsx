@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Cpu, RefreshCw, Trash2 } from "lucide-react";
+import { Cpu, RefreshCw, Trash2, Battery, Signal, Gauge, Download, Upload, ShieldAlert, Car } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,74 +19,136 @@ interface SetupPageProps {
   onReboot: () => Promise<void> | void;
 }
 
+const InfoRow = ({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) => (
+  <div className="flex justify-between items-center py-1.5 border-b border-border/10 last:border-0">
+    <span className="text-muted-foreground text-xs">{label}</span>
+    <span className={`font-mono text-xs ${valueColor || "text-foreground"}`}>{value}</span>
+  </div>
+);
+
 const SetupPage = ({ uartConfigs, onSend, onReboot }: SetupPageProps) => {
   return (
-    <div className="flex flex-col h-full gap-4 p-4 overflow-y-auto">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* System Info Card */}
-        <Card className="p-4 space-y-4 bg-card border-border">
-          <div className="flex items-center gap-2 border-b border-border pb-2">
-            <Cpu size={16} className="text-primary" />
-            <h3 className="font-semibold text-sm">System Actions</h3>
+    <div className="flex flex-col h-full gap-5 overflow-y-auto">
+      {/* Top row: System actions + Backup */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* System Actions */}
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
+            <Cpu size={14} className="text-primary" />
+            <span className="text-xs font-semibold text-foreground">System Actions</span>
           </div>
-          <div className="space-y-2">
-            <Button 
-              variant="destructive" 
-              className="w-full justify-start text-xs h-8"
-              onClick={() => onReboot()}
-            >
-              <RefreshCw className="mr-2 h-3 w-3" />
-              Save & Reboot
-            </Button>
-            <Button 
-              variant="outline" 
-              className="w-full justify-start text-xs h-8 text-destructive border-destructive/50 hover:bg-destructive/10"
-              onClick={() => onSend("HARD RESET")}
-            >
-              <Trash2 className="mr-2 h-3 w-3" />
-              Factory Reset
-            </Button>
+          <div className="p-4 space-y-2">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button className="w-full justify-start text-xs h-9 bg-primary text-primary-foreground hover:bg-primary/90 font-bold gap-2">
+                  <RefreshCw size={13} />
+                  Save & Reboot
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Save & Reboot</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Configuration will be saved and the device will restart. Make sure all settings are correct.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => onReboot()}>Confirm</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" className="w-full justify-start text-xs h-9 text-destructive border-destructive/30 hover:bg-destructive/10 gap-2">
+                  <ShieldAlert size={13} />
+                  Factory Reset
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Factory Reset</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will erase all configuration and restore factory defaults. This action cannot be undone!
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => onSend("HARD RESET")}>
+                    Reset
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
-        </Card>
+        </div>
 
         {/* Backup / Restore */}
-        <div className="flex items-center gap-4 p-4 border rounded-lg bg-card">
-          <div className="flex gap-2 w-48">
-            <Button className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-black font-bold" disabled>
-              Backup
-            </Button>
-            <Button className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-black font-bold" disabled>
-              Restore
-            </Button>
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
+            <Download size={14} className="text-primary" />
+            <span className="text-xs font-semibold text-foreground">Backup & Restore</span>
           </div>
-          <p className="text-sm text-muted-foreground">
-            <span className="font-bold">Backup</span> your configuration in case of an accident. CLI settings are <span className="text-destructive font-bold">not</span> included.
-          </p>
+          <div className="p-4 space-y-3">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              <span className="font-semibold text-foreground">Backup</span> your configuration in case of an accident. CLI settings are <span className="text-destructive font-semibold">not</span> included.
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1 h-9 text-xs gap-2 font-semibold" disabled>
+                <Download size={13} /> Backup
+              </Button>
+              <Button variant="outline" className="flex-1 h-9 text-xs gap-2 font-semibold" disabled>
+                <Upload size={13} /> Restore
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
-      
-      {/* Placeholder for Info panels similar to the reference image */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-        <div className="md:col-span-2 border rounded-lg bg-card h-64 flex items-center justify-center text-muted-foreground bg-muted/10">
-            <div className="text-center">
-                <p>3D Model Visualization</p>
-                <p className="text-xs">(Not implemented yet)</p>
+
+      {/* Bottom row: Car visualization + Info panels */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 min-h-0">
+        {/* Car visualization placeholder */}
+        <div className="md:col-span-2 bg-card border border-border rounded-lg overflow-hidden flex flex-col">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
+            <Car size={14} className="text-primary" />
+            <span className="text-xs font-semibold text-foreground">Vehicle Overview</span>
+          </div>
+          <div className="flex-1 flex items-center justify-center bg-[hsl(0,0%,10%)]">
+            <div className="text-center space-y-2">
+              <Car size={48} className="text-muted-foreground/30 mx-auto" />
+              <p className="text-sm text-muted-foreground">3D Model Visualization</p>
+              <p className="text-[10px] text-muted-foreground/60">Coming soon</p>
             </div>
+          </div>
         </div>
+
+        {/* Info panels */}
         <div className="space-y-4">
-            <div className="border rounded-lg bg-card p-4">
-                <h3 className="font-bold border-b pb-2 mb-2 text-sm">Info</h3>
-                <div className="text-xs space-y-1">
-                    <div className="flex justify-between"><span>Battery voltage:</span><span>0.00 V</span></div>
-                    <div className="flex justify-between"><span>RSSI:</span><span>0%</span></div>
-                </div>
+          <div className="bg-card border border-border rounded-lg overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
+              <Gauge size={14} className="text-primary" />
+              <span className="text-xs font-semibold text-foreground">Telemetry</span>
             </div>
-             <div className="border rounded-lg bg-card p-4">
-                <h3 className="font-bold border-b pb-2 mb-2 text-sm">GPS</h3>
-                <div className="text-xs space-y-1">
-                     <div className="flex justify-between"><span>3D Fix:</span><span>False</span></div>
-                </div>
+            <div className="p-4">
+              <InfoRow label="Battery voltage" value="0.00 V" />
+              <InfoRow label="RSSI" value="0%" />
+              <InfoRow label="Link Quality" value="—" />
+              <InfoRow label="UART Ports" value={`${uartConfigs.filter(c => c.enabled).length} / ${uartConfigs.length}`} />
             </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-lg overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
+              <Signal size={14} className="text-primary" />
+              <span className="text-xs font-semibold text-foreground">GPS Status</span>
+            </div>
+            <div className="p-4">
+              <InfoRow label="3D Fix" value="False" valueColor="text-destructive" />
+              <InfoRow label="Satellites" value="0" />
+              <InfoRow label="DOP" value="—" />
+            </div>
+          </div>
         </div>
       </div>
     </div>

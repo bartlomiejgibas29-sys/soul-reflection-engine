@@ -1,15 +1,13 @@
 import { useState, useEffect } from "react";
 import type { GpsData, GpsSettings } from "@/hooks/useSerial";
-import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { MapPin, Navigation, Signal } from "lucide-react";
-import { MapContainer, TileLayer, Marker, CircleMarker, useMap } from "react-leaflet";
+import { MapPin, Navigation, Signal, Satellite, Compass, RefreshCw, Globe } from "lucide-react";
+import { MapContainer, TileLayer, CircleMarker } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { Label } from "@/components/ui/label";
 
 interface GpsPageProps {
   data: GpsData | null;
@@ -17,8 +15,14 @@ interface GpsPageProps {
   onSend: (data: string) => Promise<void> | void;
 }
 
+const InfoRow = ({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) => (
+  <div className="flex justify-between items-center py-1.5 border-b border-border/10 last:border-0">
+    <span className="text-muted-foreground text-xs">{label}</span>
+    <span className={`font-mono text-xs font-semibold ${valueColor || "text-foreground"}`}>{value}</span>
+  </div>
+);
+
 const GpsPage = ({ data, settings, onSend }: GpsPageProps) => {
-  // Config state
   const [protocol, setProtocol] = useState("UBLOX");
   const [autoConfig, setAutoConfig] = useState(true);
   const [useGalileo, setUseGalileo] = useState(true);
@@ -43,171 +47,136 @@ const GpsPage = ({ data, settings, onSend }: GpsPageProps) => {
     return () => { onSend("DISABLE_GPS_MODE"); };
   }, []);
 
-  const handleRefresh = () => {
-    onSend("GPS_SETTINGS");
-  };
-
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full overflow-y-auto p-1">
-      {/* 1. GPS Configuration */}
-      <Card className="p-4 space-y-4 bg-card border-border">
-        <div className="flex justify-between items-center border-b border-border pb-2 mb-2">
-          <h3 className="font-semibold text-sm text-foreground">GPS Configuration</h3>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleRefresh} title="Refresh Settings">
-            <RefreshCw size={14} />
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full overflow-y-auto">
+      
+      {/* GPS Configuration */}
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Compass size={14} className="text-primary" />
+            <span className="text-xs font-semibold text-foreground">GPS Configuration</span>
+          </div>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSend("GPS_SETTINGS")}>
+            <RefreshCw size={12} />
           </Button>
         </div>
-        
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <Select value={protocol} onValueChange={(v) => {
-              setProtocol(v);
-              onSend(`SET_GPS_PROTOCOL:${v}`);
-            }}>
-              <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue placeholder="Protocol" /></SelectTrigger>
+        <div className="p-4 space-y-3">
+          <SettingRow label="Protocol">
+            <Select value={protocol} onValueChange={(v) => { setProtocol(v); onSend(`SET_GPS_PROTOCOL:${v}`); }}>
+              <SelectTrigger className="w-[120px] h-7 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="UBLOX">UBLOX</SelectItem>
                 <SelectItem value="NMEA">NMEA</SelectItem>
                 <SelectItem value="MSP">MSP</SelectItem>
               </SelectContent>
             </Select>
-            <span className="text-xs text-muted-foreground">Protocol</span>
-          </div>
+          </SettingRow>
 
-          <div className="flex items-center justify-between">
-            <Switch checked={autoConfig} onCheckedChange={(v) => {
-              setAutoConfig(v);
-              onSend(`SET_GPS_AUTO_CONFIG:${v ? 1 : 0}`);
-            }} />
-            <span className="text-xs text-muted-foreground">Auto Config</span>
-          </div>
+          <SettingRow label="Auto Config">
+            <Switch checked={autoConfig} onCheckedChange={(v) => { setAutoConfig(v); onSend(`SET_GPS_AUTO_CONFIG:${v ? 1 : 0}`); }} />
+          </SettingRow>
 
-          <div className="flex items-center justify-between">
-            <Switch checked={useGalileo} onCheckedChange={(v) => {
-              setUseGalileo(v);
-              onSend(`SET_GPS_GALILEO:${v ? 1 : 0}`);
-            }} />
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Use Galileo</span>
-              <span className="text-[10px] text-muted-foreground border rounded px-1">?</span>
-            </div>
-          </div>
+          <SettingRow label="Use Galileo">
+            <Switch checked={useGalileo} onCheckedChange={(v) => { setUseGalileo(v); onSend(`SET_GPS_GALILEO:${v ? 1 : 0}`); }} />
+          </SettingRow>
 
-          <div className="flex items-center justify-between">
-            <Switch checked={setHomeOnce} onCheckedChange={(v) => {
-              setSetHomeOnce(v);
-              onSend(`SET_GPS_HOME_ONCE:${v ? 1 : 0}`);
-            }} />
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Set Home Point Once</span>
-              <span className="text-[10px] text-muted-foreground border rounded px-1">?</span>
-            </div>
-          </div>
+          <SettingRow label="Set Home Once">
+            <Switch checked={setHomeOnce} onCheckedChange={(v) => { setSetHomeOnce(v); onSend(`SET_GPS_HOME_ONCE:${v ? 1 : 0}`); }} />
+          </SettingRow>
 
-          <div className="flex items-center justify-between">
-            <Select value={groundAssist} onValueChange={(v) => {
-              setGroundAssist(v);
-              onSend(`SET_GPS_GROUND_ASSIST:${v}`);
-            }}>
-              <SelectTrigger className="w-[140px] h-8 text-xs"><SelectValue placeholder="Type" /></SelectTrigger>
+          <SettingRow label="Ground Assistance">
+            <Select value={groundAssist} onValueChange={(v) => { setGroundAssist(v); onSend(`SET_GPS_GROUND_ASSIST:${v}`); }}>
+              <SelectTrigger className="w-[140px] h-7 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="European">European EGNOS</SelectItem>
                 <SelectItem value="USA">USA WAAS</SelectItem>
                 <SelectItem value="None">None</SelectItem>
               </SelectContent>
             </Select>
-            <span className="text-xs text-muted-foreground">Ground Assistance Type</span>
-          </div>
+          </SettingRow>
 
-          <div className="flex items-center justify-between gap-2">
-            <Input 
-              value={declination} 
-              onChange={e => setDeclination(e.target.value)} 
+          <SettingRow label="Mag Declination (°)">
+            <Input
+              value={declination}
+              onChange={e => setDeclination(e.target.value)}
               onBlur={e => onSend(`SET_GPS_MAG_DECLINATION:${e.target.value}`)}
-              className="w-20 h-8 text-xs font-mono text-right"
+              className="w-20 h-7 text-xs font-mono text-right"
             />
-            <span className="text-xs text-muted-foreground">Magnetometer Declination [deg]</span>
+          </SettingRow>
+        </div>
+      </div>
+
+      {/* GPS Status */}
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
+          <Satellite size={14} className="text-primary" />
+          <span className="text-xs font-semibold text-foreground">GPS Status</span>
+          <div className="flex items-center gap-1.5 ml-auto">
+            <div className={`w-1.5 h-1.5 rounded-full ${data?.fix ? 'bg-[hsl(var(--sensor-ok))] animate-pulse' : 'bg-destructive'}`} />
+            <span className="text-[10px] text-muted-foreground">{data?.fix ? '3D FIX' : 'NO FIX'}</span>
           </div>
         </div>
-      </Card>
-
-      {/* 2. GPS Status */}
-      <Card className="p-4 space-y-2 bg-card border-border flex flex-col">
-        <div className="flex justify-between items-center border-b border-border pb-2 mb-2">
-          <h3 className="font-semibold text-sm text-foreground">GPS</h3>
-          <span className="text-muted-foreground text-xs">?</span>
+        <div className="p-4">
+          <InfoRow label="3D Fix" value={data?.fix ? "Yes" : "No"} valueColor={data?.fix ? "text-[hsl(var(--sensor-ok))]" : "text-destructive"} />
+          <InfoRow label="Satellites" value={`${data?.numSatellites ?? 0}`} />
+          <InfoRow label="Altitude" value={`${data?.altitude ?? 0} m`} />
+          <InfoRow label="Speed" value={`${data?.speed ?? 0} cm/s`} />
+          <InfoRow label="Heading (GPS)" value={`${data?.headingGps ?? 0}°`} />
+          <InfoRow label="Position" value={data?.latitude ? `${data.latitude.toFixed(6)}, ${data.longitude.toFixed(6)}` : "—"} valueColor="text-primary" />
+          <InfoRow label="Dist to Home" value={`${data?.distToHome ?? 0} m`} />
+          <InfoRow label="DOP" value={(data?.dop ?? 0).toFixed(2)} />
         </div>
+      </div>
 
-        <div className="space-y-1 text-xs">
-          <StatusRow label="3D Fix:" value={data?.fix ? "True" : "False"} valueColor={data?.fix ? "text-green-500 font-bold" : "text-red-500"} />
-          <StatusRow label="Number of Satellites:" value={data?.numSatellites ?? 0} />
-          <StatusRow label="Altitude:" value={`${data?.altitude ?? 0} m`} />
-          <StatusRow label="Speed:" value={`${data?.speed ?? 0} cm/s`} />
-          <StatusRow label="Heading IMU / GPS:" value={`${data?.headingImu ?? 0} / ${data?.headingGps ?? 0} deg`} />
-          <StatusRow label="Current Latitude / Longitude:" value={`${data?.latitude?.toFixed(6) ?? 0} / ${data?.longitude?.toFixed(6) ?? 0} deg`} valueColor="text-orange-400" />
-          <StatusRow label="Dist to Home:" value={`${data?.distToHome ?? 0} m`} />
-          <StatusRow label="Positional DOP:" value={(data?.dop ?? 0).toFixed(2)} />
+      {/* Satellite Signal Strength */}
+      <div className="bg-card border border-border rounded-lg overflow-hidden flex flex-col h-[300px]">
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
+          <Signal size={14} className="text-primary" />
+          <span className="text-xs font-semibold text-foreground">Satellite Signal</span>
+          <span className="text-[10px] text-muted-foreground ml-auto">{data?.satellites?.length ?? 0} tracked</span>
         </div>
-      </Card>
-
-      {/* 3. GPS Signal Strength */}
-      <Card className="p-4 space-y-2 bg-card border-border flex flex-col h-[300px]">
-        <div className="flex justify-between items-center border-b border-border pb-2 mb-2">
-          <h3 className="font-semibold text-sm text-foreground">GPS Signal Strength</h3>
-          <span className="text-muted-foreground text-xs">?</span>
-        </div>
-
-        <div className="overflow-auto flex-1">
-          <table className="w-full text-xs">
-            <thead className="text-muted-foreground sticky top-0 bg-card z-10">
-              <tr>
-                <th className="text-left font-normal pb-2">Gnss ID</th>
-                <th className="text-center font-normal pb-2">Sat ID</th>
-                <th className="text-left font-normal pb-2 w-1/3">Signal Strength</th>
-                <th className="text-center font-normal pb-2">Status</th>
-                <th className="text-center font-normal pb-2">Quality</th>
-              </tr>
-            </thead>
-            <tbody className="font-mono text-[11px]">
-              {(data?.satellites || []).map((sat, i) => (
-                <tr key={i} className="border-b border-border/10 last:border-0 hover:bg-white/5">
-                  <td className="py-1.5">{sat.gnssId}</td>
-                  <td className="text-center">{sat.satId}</td>
-                  <td className="pr-2">
-                    <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full rounded-full ${sat.signalStrength > 50 ? 'bg-green-500' : sat.signalStrength > 30 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                        style={{ width: `${Math.min(100, sat.signalStrength)}%` }}
-                      />
-                    </div>
-                  </td>
-                  <td className="text-center">
-                    <span className={`px-1.5 py-0.5 rounded ${sat.status === 'used' ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'}`}>
-                      {sat.status}
-                    </span>
-                  </td>
-                  <td className="text-center">
-                    <span className={`px-1.5 py-0.5 rounded ${sat.quality === 'fully locked' ? 'bg-green-900/50 text-green-400' : sat.quality === 'searching' ? 'bg-red-900/50 text-red-400' : 'bg-yellow-900/50 text-yellow-400'}`}>
-                      {sat.quality}
-                    </span>
-                  </td>
-                </tr>
+        <div className="flex-1 overflow-auto p-3">
+          {(data?.satellites?.length ?? 0) === 0 ? (
+            <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
+              No satellites tracked
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {data?.satellites?.map((sat, i) => (
+                <div key={i} className="flex items-center gap-2 py-1">
+                  <span className="text-[10px] font-mono text-muted-foreground w-14">{sat.gnssId} {sat.satId}</span>
+                  <div className="flex-1 h-2 bg-[hsl(0,0%,8%)] rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        sat.signalStrength > 50 ? 'bg-[hsl(var(--sensor-ok))]' : sat.signalStrength > 30 ? 'bg-primary' : 'bg-destructive'
+                      }`}
+                      style={{ width: `${Math.min(100, sat.signalStrength)}%` }}
+                    />
+                  </div>
+                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                    sat.status === 'used' ? 'bg-[hsl(var(--sensor-ok))]/15 text-[hsl(var(--sensor-ok))]' : 'bg-destructive/15 text-destructive'
+                  }`}>{sat.status}</span>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          )}
         </div>
-      </Card>
+      </div>
 
-      {/* 4. Current GPS Location (Satellite Map) */}
-      <Card className="p-0 overflow-hidden bg-card border-border flex flex-col h-[300px] relative">
-        <div className="absolute top-0 left-0 right-0 p-2 bg-black/60 backdrop-blur-sm z-10 flex justify-between items-center border-b border-white/10">
-          <h3 className="font-semibold text-sm text-white">Current GPS location</h3>
-          <span className="text-[10px] text-white/70">
-            {data && data.fix ? `${data.latitude.toFixed(6)}, ${data.longitude.toFixed(6)}` : "Waiting for fix..."}
+      {/* Map */}
+      <div className="bg-card border border-border rounded-lg overflow-hidden flex flex-col h-[300px] relative">
+        <div className="absolute top-0 left-0 right-0 px-4 py-2 bg-background/80 backdrop-blur-sm z-10 flex justify-between items-center border-b border-border">
+          <div className="flex items-center gap-2">
+            <Globe size={14} className="text-primary" />
+            <span className="text-xs font-semibold text-foreground">Location</span>
+          </div>
+          <span className="text-[10px] text-muted-foreground font-mono">
+            {data?.fix ? `${data.latitude.toFixed(6)}, ${data.longitude.toFixed(6)}` : "Waiting for fix..."}
           </span>
         </div>
         <div className="flex-1">
-          {data && data.fix ? (
+          {data?.fix ? (
             <MapContainer
               {...{ center: [data.latitude, data.longitude], zoom: 18 } as any}
               className="w-full h-full"
@@ -216,22 +185,23 @@ const GpsPage = ({ data, settings, onSend }: GpsPageProps) => {
               <CircleMarker {...{ center: [data.latitude, data.longitude], radius: 10, pathOptions: { color: "#f59e0b" } } as any} />
             </MapContainer>
           ) : (
-            <div className="flex items-center justify-center w-full h-full bg-neutral-900">
-              <div className="text-xs text-muted-foreground">
-                No fix — move outside for better satellite visibility
+            <div className="flex items-center justify-center w-full h-full bg-[hsl(0,0%,8%)]">
+              <div className="text-center space-y-2">
+                <MapPin size={32} className="text-muted-foreground/20 mx-auto" />
+                <p className="text-xs text-muted-foreground">No fix — move outside for satellite visibility</p>
               </div>
             </div>
           )}
         </div>
-      </Card>
+      </div>
     </div>
   );
 };
 
-const StatusRow = ({ label, value, valueColor = "text-foreground" }: { label: string; value: string | number; valueColor?: string }) => (
-  <div className="flex justify-between items-center border-b border-border/10 py-1 last:border-0">
-    <span className="text-muted-foreground">{label}</span>
-    <span className={`font-mono ${valueColor}`}>{value}</span>
+const SettingRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div className="flex items-center justify-between gap-4">
+    <Label className="text-xs text-muted-foreground">{label}</Label>
+    {children}
   </div>
 );
 

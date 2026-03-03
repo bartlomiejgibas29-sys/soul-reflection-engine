@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { useState, useEffect } from "react";
 import type { UartConfig } from "@/hooks/useSerial";
 import { Input } from "@/components/ui/input";
-import { RefreshCw, Save, ArrowLeftRight } from "lucide-react";
+import { RefreshCw, Save, ArrowLeftRight, Cable, AlertTriangle, Lightbulb } from "lucide-react";
 
 const BAUD_OPTIONS = ["9600", "57600", "115200", "230400", "420000", "460800"];
 const LOW_BAUD_OPTIONS = ["9600", "57600", "115200"];
@@ -109,62 +109,73 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
 
   return (
     <div className="space-y-4">
-      {/* Status & actions bar */}
-      <div className="flex flex-wrap justify-between items-center gap-3 bg-card border border-border rounded-lg px-4 py-3">
-        <div className="flex items-center gap-2 text-xs">
-          <div className={`w-2 h-2 rounded-full ${connected ? 'bg-[hsl(var(--sensor-ok))]' : 'bg-destructive'}`} />
-          <span className="text-muted-foreground">
-            {connected ? "Connected — configure UART ports below" : "Not connected — click Connect to begin"}
-          </span>
-        </div>
-        <div className="flex gap-1.5">
-          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleDisableAll}>Disable All</Button>
-          <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleEnableAll}>Enable All</Button>
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => onSend("PIN_TABLE")}>
-            <RefreshCw size={12} /> Refresh
-          </Button>
+      {/* Header bar */}
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <div className="flex flex-wrap justify-between items-center gap-3 px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <Cable size={14} className="text-primary" />
+            <span className="text-xs font-semibold text-foreground">UART Configuration</span>
+            <div className="flex items-center gap-1.5 ml-2">
+              <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-[hsl(var(--sensor-ok))]' : 'bg-destructive'}`} />
+              <span className="text-[10px] text-muted-foreground">
+                {connected ? "Connected" : "Disconnected"}
+              </span>
+            </div>
+          </div>
+          <div className="flex gap-1.5">
+            <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" onClick={handleDisableAll}>Disable All</Button>
+            <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" onClick={handleEnableAll}>Enable All</Button>
+            <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" onClick={() => onSend("PIN_TABLE")}>
+              <RefreshCw size={11} /> Refresh
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Warnings */}
-      <div className="space-y-2 text-xs">
-        <div className="bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-2 text-destructive">
-          ⚠ <strong>UART 2 & 3</strong> are emulated (SoftwareSerial) and slow. Max recommended baudrate is <strong>115200</strong>. Do not use for high-speed devices like ELRS receivers.
+      <div className="space-y-1.5">
+        <div className="flex items-start gap-2 bg-destructive/8 border border-destructive/20 rounded-lg px-3 py-2">
+          <AlertTriangle size={13} className="text-destructive mt-0.5 shrink-0" />
+          <p className="text-[11px] text-destructive leading-relaxed">
+            <strong>UART 2 & 3</strong> are emulated (SoftwareSerial). Max baudrate: <strong>115200</strong>. Do not use for ELRS receivers.
+          </p>
         </div>
-        <div className="bg-primary/8 border border-primary/20 rounded-lg px-4 py-2 text-primary/80">
-          ⚠ Setting UART to pins <strong>0</strong> and <strong>1</strong> is not recommended — they are used for USB communication.
-        </div>
-        <div className="bg-primary/8 border border-primary/20 rounded-lg px-4 py-2 text-primary/80">
-          💡 Pins <strong>20</strong> and <strong>21</strong> should be used as UART1.
+        <div className="flex items-start gap-2 bg-primary/5 border border-primary/15 rounded-lg px-3 py-2">
+          <Lightbulb size={13} className="text-primary mt-0.5 shrink-0" />
+          <p className="text-[11px] text-primary/80 leading-relaxed">
+            Pins <strong>20</strong> and <strong>21</strong> are recommended for UART1. Avoid pins <strong>0/1</strong> (USB).
+          </p>
         </div>
       </div>
 
       {/* Table */}
-      <div className="border border-border rounded-lg overflow-hidden">
+      <div className="bg-card border border-border rounded-lg overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="bg-card hover:bg-card">
-              <TableHead className="w-[90px] text-xs font-semibold text-muted-foreground">Port</TableHead>
-              <TableHead className="w-[80px] text-xs font-semibold text-muted-foreground">Enabled</TableHead>
-              <TableHead className="w-[120px] text-xs font-semibold text-muted-foreground">Type</TableHead>
-              <TableHead className="text-xs font-semibold text-muted-foreground">RX Pin</TableHead>
-              <TableHead className="text-xs font-semibold text-muted-foreground">TX Pin</TableHead>
-              <TableHead className="text-xs font-semibold text-muted-foreground">Baudrate</TableHead>
-              <TableHead className="w-[50px] text-xs font-semibold text-muted-foreground text-center">Swap</TableHead>
+            <TableRow className="bg-secondary/30 hover:bg-secondary/30">
+              <TableHead className="w-[90px] text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Port</TableHead>
+              <TableHead className="w-[70px] text-[10px] font-bold text-muted-foreground uppercase tracking-wider">On</TableHead>
+              <TableHead className="w-[120px] text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Function</TableHead>
+              <TableHead className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">RX</TableHead>
+              <TableHead className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">TX</TableHead>
+              <TableHead className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Baud</TableHead>
+              <TableHead className="w-[44px] text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">⇄</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {localConfigs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-10 text-muted-foreground text-sm">
-                  No UART configuration received. Click <strong>Refresh</strong> or connect a device.
+                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground text-xs">
+                  No UART data received. Click <strong className="text-foreground">Refresh</strong> or reconnect.
                 </TableCell>
               </TableRow>
             ) : (
               localConfigs.map((cfg) => (
-                <TableRow key={cfg.id} className={`transition-colors ${cfg.enabled ? '' : 'opacity-50'}`}>
-                  <TableCell className="font-semibold text-sm text-foreground">
+                <TableRow key={cfg.id} className={`transition-colors ${cfg.enabled ? '' : 'opacity-40'}`}>
+                  <TableCell className="font-bold text-xs text-foreground">
                     UART {cfg.id}
+                    {cfg.id === 1 && <span className="text-[9px] text-primary ml-1">HW</span>}
+                    {cfg.id > 1 && <span className="text-[9px] text-muted-foreground ml-1">SW</span>}
                   </TableCell>
                   <TableCell>
                     <Switch
@@ -178,9 +189,7 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
                       onValueChange={(v) => update(cfg.id, "type", v)}
                       disabled={!cfg.enabled}
                     >
-                      <SelectTrigger className="h-7 w-[110px] text-xs font-mono bg-secondary/50 border-border">
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger className="h-7 w-[100px] text-[11px] font-mono"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="GENERIC">GENERIC</SelectItem>
                         <SelectItem value="RECEIVER">RECEIVER</SelectItem>
@@ -191,7 +200,7 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
                   <TableCell>
                     <Input
                       type="number"
-                      className="w-20 h-7 text-xs font-mono bg-secondary/50 border-border"
+                      className="w-16 h-7 text-[11px] font-mono bg-secondary/30"
                       value={cfg.rx}
                       onChange={(e) => update(cfg.id, "rx", parseInt(e.target.value))}
                       disabled={!cfg.enabled}
@@ -200,7 +209,7 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
                   <TableCell>
                     <Input
                       type="number"
-                      className="w-20 h-7 text-xs font-mono bg-secondary/50 border-border"
+                      className="w-16 h-7 text-[11px] font-mono bg-secondary/30"
                       value={cfg.tx}
                       onChange={(e) => update(cfg.id, "tx", parseInt(e.target.value))}
                       disabled={!cfg.enabled}
@@ -212,9 +221,7 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
                       onValueChange={(v) => update(cfg.id, "baudrate", parseInt(v))}
                       disabled={!cfg.enabled}
                     >
-                      <SelectTrigger className="h-7 w-28 text-xs font-mono bg-secondary/50 border-border">
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger className="h-7 w-24 text-[11px] font-mono"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {(cfg.id === 1 ? BAUD_OPTIONS : LOW_BAUD_OPTIONS).map((opt) => (
                           <SelectItem key={opt} value={opt}>{opt}</SelectItem>
@@ -228,10 +235,9 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
                       size="icon"
                       className="h-7 w-7 text-muted-foreground hover:text-primary"
                       onClick={() => handleSwap(cfg.id)}
-                      title="Swap RX/TX"
                       disabled={!cfg.enabled}
                     >
-                      <ArrowLeftRight size={14} />
+                      <ArrowLeftRight size={13} />
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -242,9 +248,9 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
       </div>
 
       {/* Save button */}
-      <div className="flex justify-end pt-1">
+      <div className="flex justify-end">
         <Button
-          className="h-9 px-6 bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-sm gap-2"
+          className="h-9 px-8 bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs gap-2 shadow-lg shadow-primary/20"
           onClick={handleSave}
         >
           <Save size={14} />
