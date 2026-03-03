@@ -15,21 +15,21 @@ interface SidebarProps {
 
 const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
   return (
-    <nav className="w-44 min-h-full bg-sidebar border-r border-sidebar-border flex flex-col justify-between pb-4">
-      <div className="flex flex-col">
+    <nav className="w-48 min-h-full bg-sidebar border-r border-sidebar-border flex flex-col">
+      <div className="flex flex-col py-2">
         {navItems.map(({ icon: Icon, label }) => {
           const isActive = activeTab === label;
           return (
             <button
               key={label}
               onClick={() => onTabChange(label)}
-              className={`flex items-center gap-2 px-3 py-2.5 text-sm text-left transition-colors border-l-4 ${
+              className={`flex items-center gap-3 px-4 py-3 text-sm text-left transition-all border-l-[3px] ${
                 isActive
-                  ? "border-nav-active bg-nav-active/10 text-primary font-semibold"
-                  : "border-transparent text-sidebar-foreground hover:bg-secondary hover:text-foreground"
+                  ? "border-primary bg-primary/8 text-primary font-semibold"
+                  : "border-transparent text-sidebar-foreground hover:bg-secondary/50 hover:text-foreground"
               }`}
             >
-              <Icon size={16} className={isActive ? "text-primary" : ""} />
+              <Icon size={16} className={isActive ? "text-primary" : "text-muted-foreground"} />
               {label}
             </button>
           );
