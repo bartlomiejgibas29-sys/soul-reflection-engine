@@ -147,8 +147,8 @@ export function useSerial() {
                   gnssId: "GPS",
                   satId: i + 1,
                   signalStrength: Math.max(10, Math.min(100, base - i * 3)),
-                  status: fix ? "used" : "unused",
-                  quality: fix ? "fully locked" : "searching",
+                  status: (fix ? "used" : "unused") as "used" | "unused",
+                  quality: (fix ? "fully locked" : "searching") as GpsSatellite["quality"],
                 }))
               : [];
           setGpsData({
