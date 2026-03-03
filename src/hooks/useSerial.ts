@@ -344,7 +344,24 @@ export function useSerial() {
   }, []);
 
   const connect = useCallback(async (baudRate: number = 115200) => {
-    let openTimeout: any = null;
+    const openPortWithTimeout = (port: any, timeoutMs: number) =>
+      new Promise<void>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error("Timeout podczas otwierania portu szeregowego"));
+        }, timeoutMs);
+
+        port
+          .open({ baudRate })
+          .then(() => {
+            clearTimeout(timeoutId);
+            resolve();
+          })
+          .catch((error: any) => {
+            clearTimeout(timeoutId);
+            reject(error);
+          });
+      });
+
     try {
       if (!("serial" in navigator)) {
         alert("Web Serial API is unavailable. Open this page directly in Chrome/Edge (not in an iframe).");
@@ -357,17 +374,8 @@ export function useSerial() {
       }
 
       const port = await (navigator as any).serial.requestPort();
-      
-      openTimeout = setTimeout(() => {
-        throw new Error("Timeout podczas otwierania portu szeregowego");
-      }, 5000);
-      
-      await port.open({ baudRate });
-      if (openTimeout) {
-        clearTimeout(openTimeout);
-        openTimeout = null;
-      }
-      
+      await openPortWithTimeout(port, 5000);
+
       portRef.current = port;
       setConnected(true);
       setLastSent("Connected to serial port");
@@ -387,11 +395,6 @@ export function useSerial() {
       }, 500);
 
     } catch (err: any) {
-      if (openTimeout) {
-        clearTimeout(openTimeout);
-        openTimeout = null;
-      }
-      
       if (err.name === "SecurityError") {
         alert("Web Serial is blocked in an iframe. Open the page in a new tab.");
       } else if (err.name === "NotFoundError") {
@@ -404,7 +407,7 @@ export function useSerial() {
         setLogs(prev => [...prev, `Connection error: ${err.message}\n`]);
         alert("Błąd połączenia: " + err.message);
       }
-      
+
       setConnected(false);
       portRef.current = null;
     }
