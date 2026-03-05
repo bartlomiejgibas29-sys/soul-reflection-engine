@@ -177,6 +177,9 @@ export function useSerial() {
       const parts = line.split(",");
       if (parts.length >= 14) {
         setReceiverSettings({
+          controlMode: "PROPORTIONAL",
+          directionChannel: 1,
+          speedChannel: 2,
           channelMap: parts[1],
           rcMin: parseInt(parts[2]) || 1000,
           rcMid: parseInt(parts[3]) || 1500,

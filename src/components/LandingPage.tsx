@@ -8,9 +8,9 @@ const LandingPage = () => {
       {/* Hero / Welcome Banner */}
       <div className="bg-background flex flex-col items-center justify-center pt-12 pb-8 border-b border-border/10">
         <div className="flex items-center gap-4 mb-4">
-          <Rocket className="text-yellow-500 w-16 h-16 animate-pulse" />
+          <Rocket className="text-primary w-16 h-16 animate-pulse" />
           <h1 className="text-6xl font-black italic tracking-tighter text-foreground">
-            BETA<span className="text-yellow-500">DRIVE</span>
+            BETA<span className="text-primary">DRIVE</span>
           </h1>
         </div>
         <p className="text-muted-foreground text-lg max-w-2xl text-center">
@@ -24,7 +24,7 @@ const LandingPage = () => {
           
           {/* Hardware Section */}
           <div className="bg-card border border-border rounded-sm shadow-sm p-6">
-            <h2 className="text-xl font-bold text-yellow-500 mb-4 flex items-center gap-2">
+            <h2 className="text-xl font-bold text-primary mb-4 flex items-center gap-2">
               <Cpu size={20} /> Hardware Support
             </h2>
             <div className="space-y-4 text-sm text-card-foreground/80">
@@ -33,16 +33,16 @@ const LandingPage = () => {
               </p>
               
               <div className="space-y-2 pt-2">
-                <a href="#" className="flex items-center gap-2 text-primary hover:text-yellow-500 transition-colors">
+                <a href="#" className="flex items-center gap-2 text-primary hover:text-primary/70 transition-colors">
                   <Download size={14} /> Download Blackbox Log Viewer
                 </a>
-                <a href="#" className="flex items-center gap-2 text-primary hover:text-yellow-500 transition-colors">
+                <a href="#" className="flex items-center gap-2 text-primary hover:text-primary/70 transition-colors">
                   <ExternalLink size={14} /> Download STM USB VCP Drivers
                 </a>
-                <a href="#" className="flex items-center gap-2 text-primary hover:text-yellow-500 transition-colors">
+                <a href="#" className="flex items-center gap-2 text-primary hover:text-primary/70 transition-colors">
                   <ExternalLink size={14} /> Download CP210x Drivers
                 </a>
-                <a href="#" className="flex items-center gap-2 text-primary hover:text-yellow-500 transition-colors">
+                <a href="#" className="flex items-center gap-2 text-primary hover:text-primary/70 transition-colors">
                   <ExternalLink size={14} /> Download Zadig (Windows driver installation)
                 </a>
               </div>
@@ -64,7 +64,7 @@ const LandingPage = () => {
 
           {/* Contributing Section */}
           <div className="bg-card border border-border rounded-sm shadow-sm p-6">
-            <h2 className="text-xl font-bold text-yellow-500 mb-4 flex items-center gap-2">
+            <h2 className="text-xl font-bold text-primary mb-4 flex items-center gap-2">
               <Github size={20} /> Contributing
             </h2>
             <div className="space-y-4 text-sm text-card-foreground/80">
@@ -94,7 +94,7 @@ const LandingPage = () => {
                 <p className="mb-4">
                   BetaDrive is open source and free of charge. If you found it useful, please consider supporting its development.
                 </p>
-                <button className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-2 px-6 rounded-full transition-colors flex items-center gap-2 mx-auto w-fit shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0">
+                <button className="bg-primary hover:bg-primary/80 text-primary-foreground font-bold py-2 px-6 rounded-full transition-colors flex items-center gap-2 mx-auto w-fit shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0">
                   <span className="text-lg">♥</span> Donate
                 </button>
               </div>
