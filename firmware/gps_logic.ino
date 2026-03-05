@@ -18,7 +18,9 @@ void configureGps() {
         sendGpsCommand(cfgNav5, sizeof(cfgNav5));
         
         if (gps_galileo) {
-            // Tu można dodać ramkę UBX-CFG-GNSS włączającą Galileo
+            // UBX-CFG-GNSS (Włączenie Galileo)
+            uint8_t cfgGalileo[] = {0xB5, 0x62, 0x06, 0x3E, 0x2C, 0x00, 0x00, 0x00, 0x20, 0x05, 0x00, 0x08, 0x10, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01, 0x01, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01, 0x02, 0x04, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x05, 0x00, 0x03, 0x00, 0x01, 0x00, 0x01, 0x01, 0x06, 0x08, 0x0E, 0x00, 0x01, 0x00, 0x01, 0x01, 0xD0, 0x3D};
+            sendGpsCommand(cfgGalileo, sizeof(cfgGalileo));
         }
     } else if (gps_protocol == "MSP") {
         Serial.println(">> Config: MSP GPS Mode initialized");
@@ -78,7 +80,7 @@ void handleGpsLoop() {
             }
         }
 
-        if (millis() - lastGpsUpdate > 500) { // Wysyłaj co 500ms
+        if (millis() - lastGpsUpdate > 200) { // Wysyłaj co 200ms (5Hz)
             lastGpsUpdate = millis();
             
             // Format: GPS_FULL,fix(0/1),sats,lat,lon,alt(m),speed(kmph),course,hdop

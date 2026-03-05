@@ -52,6 +52,9 @@ export interface GpsSatellite {
 }
 
 export interface ReceiverSettings {
+  controlMode: "PROPORTIONAL" | "DIRECTION_SELECTED";
+  directionChannel: number;
+  speedChannel: number;
   channelMap: string;
   rcMin: number;
   rcMid: number;
@@ -91,146 +94,146 @@ export function useSerial() {
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const bufferRef = useRef<string>("");
 
-  const parseBoardResponse = useCallback((data: string) => {
-    const lines = data.split("\n").map(l => l.trim()).filter(Boolean);
+  const parseBoardResponse = useCallback((line: string) => {
+    line = line.trim();
+    if (!line) return;
+    
     let board = "";
     
-    // We will collect UART configs here
-    // But since data comes in chunks, we might receive partial CSV or updates
-    // For simplicity, we parse line by line and update state if it matches CSV format
-    
-    for (const line of lines) {
-      // Check for board info
-      if (/^ESP-ROM:/i.test(line)) {
-        board = line.replace(/^ESP-ROM:/i, "").trim();
-      } else if (/^=== SYSTEM START ===/i.test(line) || /^=== SYSTEM UART MULTIPLEXER ===/i.test(line)) {
-        board = "esp32c3";
-      }
+    // Check for board info
+    if (/^ESP-ROM:/i.test(line)) {
+      board = line.replace(/^ESP-ROM:/i, "").trim();
+    } else if (/^=== SYSTEM START ===/i.test(line) || /^=== SYSTEM UART MULTIPLEXER ===/i.test(line)) {
+      board = "esp32c3";
+    }
 
-      // Parse UART config: UART_CONF,id,enabled,rx,tx,baud,type
-      if (line.startsWith("UART_CONF,")) {
-        const parts = line.split(",");
-        const id = parseInt(parts[1]);
-        if (id >= 1 && id <= 3) {
-          setUartConfigs(prev => {
-            const next = [...prev];
-            next[id-1] = {
-              id,
-              enabled: parts[2] === "ENABLED",
-              rx: parseInt(parts[3]),
-              tx: parseInt(parts[4]),
-              baudrate: parseInt(parts[5]),
-              type: parts[6] as any
-            };
-            return next;
-          });
-        }
-        continue;
-      }
-
-      // Parse GPS Data: GPS_FULL,fix,sats,lat,lon,alt,speed,course,hdop
-      if (line.startsWith("GPS_FULL,")) {
-        const parts = line.split(",");
-        if (parts.length >= 9) {
-          const fix = parts[1] === "1";
-          const numSat = parseInt(parts[2]) || 0;
-          const lat = parseFloat(parts[3]) || 0;
-          const lon = parseFloat(parts[4]) || 0;
-          const alt = parseFloat(parts[5]) || 0;
-          const spd = parseFloat(parts[6]) || 0;
-          const hdg = parseFloat(parts[7]) || 0;
-          const dop = parseFloat(parts[8]) || 0;
-          const base = Math.max(0, Math.min(100, Math.round(100 / Math.max(1, dop))));
-          const sats =
-            numSat > 0
-              ? Array.from({ length: numSat }).map((_, i) => ({
-                  gnssId: "GPS",
-                  satId: i + 1,
-                  signalStrength: Math.max(10, Math.min(100, base - i * 3)),
-                  status: (fix ? "used" : "unused") as "used" | "unused",
-                  quality: (fix ? "fully locked" : "searching") as GpsSatellite["quality"],
-                }))
-              : [];
-          setGpsData({
-            fix,
-            numSatellites: numSat,
-            latitude: lat,
-            longitude: lon,
-            altitude: alt,
-            speed: spd,
-            headingGps: hdg,
-            dop,
-            headingImu: 0,
-            distToHome: 0,
-            satellites: sats,
-          });
-        }
-        continue;
-      }
-
-      // Parse RX settings: RX_SETTINGS,map,rcmin,rcmid,rcmax,db_rc,db_yaw,db_thr3d,rc_smooth,rc_coeff,steer_ch,thr_ch,steer_rev,thr_rev
-      if (line.startsWith("RX_SETTINGS,")) {
-        const parts = line.split(",");
-        if (parts.length >= 14) {
-          setReceiverSettings({
-            channelMap: parts[1],
-            rcMin: parseInt(parts[2]) || 1000,
-            rcMid: parseInt(parts[3]) || 1500,
-            rcMax: parseInt(parts[4]) || 2000,
-            deadbandRc: parseInt(parts[5]) || 0,
-            deadbandYaw: parseInt(parts[6]) || 0,
-            deadbandThr3d: parseInt(parts[7]) || 0,
-            rcSmoothing: parts[8] === "1",
-            rcSmoothingCoeff: parseInt(parts[9]) || 30,
-            steeringChannel: parseInt(parts[10]) || 1,
-            throttleChannel: parseInt(parts[11]) || 2,
-            steeringRev: parts[12] === "1",
-            throttleRev: parts[13] === "1",
-          });
-        }
-        continue;
-      }
-
-      // Parse GPS settings: GPS_SETTINGS,protocol,auto,galileo,home,assist,decl
-      if (line.startsWith("GPS_SETTINGS,")) {
-        const parts = line.split(",");
-        if (parts.length >= 7) {
-          setGpsSettings({
-            protocol: parts[1],
-            autoConfig: parts[2] === "1",
-            useGalileo: parts[3] === "1",
-            setHomeOnce: parts[4] === "1",
-            groundAssistance: parts[5],
-            declination: parseFloat(parts[6]) || 0.0,
-          });
-        }
-        continue;
-      }
-
-      // Parse ELRS Data: ELRS_FULL,ch1...ch16,stats...
-      if (line.startsWith("ELRS_FULL,")) {
-          const parts = line.split(",");
-          // ELRS_FULL is index 0. channels 1-16 are indices 1-16. stats are 17-26
-          if (parts.length >= 27) {
-              const channels = parts.slice(1, 17).map(Number);
-              const stats = parts.slice(17).map(Number);
-              
-              setReceiverData({
-                  channels,
-                  uplinkRSS1: stats[0],
-                  uplinkRSS2: stats[1],
-                  uplinkLQ: stats[2],
-                  uplinkSNR: stats[3],
-                  activeAntenna: stats[4],
-                  rfMode: stats[5],
-                  uplinkTXPower: stats[6],
-                  downlinkRSSI: stats[7],
-                  downlinkLQ: stats[8],
-                  downlinkSNR: stats[9]
-              });
+    // Parse UART config: UART_CONF,id,enabled,rx,tx,baud,type
+    if (line.startsWith("UART_CONF,")) {
+      const parts = line.split(",");
+      const id = parseInt(parts[1]);
+      if (id >= 1 && id <= 3) {
+        setUartConfigs(prev => {
+          const next = [...prev];
+          // Ensure array is large enough
+          while (next.length < id) {
+            next.push({ id: next.length + 1, enabled: false, rx: -1, tx: -1, baudrate: 9600, type: "GENERIC" });
           }
-          continue;
+          next[id-1] = {
+            id,
+            enabled: parts[2] === "ENABLED",
+            rx: parseInt(parts[3]),
+            tx: parseInt(parts[4]),
+            baudrate: parseInt(parts[5]),
+            type: parts[6] as any
+          };
+          return next;
+        });
       }
+      return;
+    }
+
+    // Parse GPS Data: GPS_FULL,fix,sats,lat,lon,alt,speed,course,hdop
+    if (line.startsWith("GPS_FULL,")) {
+      const parts = line.split(",");
+      if (parts.length >= 9) {
+        const fix = parts[1] === "1";
+        const numSat = parseInt(parts[2]) || 0;
+        const lat = parseFloat(parts[3]) || 0;
+        const lon = parseFloat(parts[4]) || 0;
+        const alt = parseFloat(parts[5]) || 0;
+        const spd = parseFloat(parts[6]) || 0;
+        const hdg = parseFloat(parts[7]) || 0;
+        const dop = parseFloat(parts[8]) || 0;
+        const base = Math.max(0, Math.min(100, Math.round(100 / Math.max(1, dop))));
+        const sats =
+          numSat > 0
+            ? Array.from({ length: numSat }).map((_, i) => ({
+                gnssId: "GPS",
+                satId: i + 1,
+                signalStrength: Math.max(10, Math.min(100, base - i * 3)),
+                status: (fix ? "used" : "unused") as "used" | "unused",
+                quality: (fix ? "fully locked" : "searching") as GpsSatellite["quality"],
+              }))
+            : [];
+        setGpsData({
+          fix,
+          numSatellites: numSat,
+          latitude: lat,
+          longitude: lon,
+          altitude: alt,
+          speed: spd,
+          headingGps: hdg,
+          dop,
+          headingImu: 0,
+          distToHome: 0,
+          satellites: sats,
+        });
+      }
+      return;
+    }
+
+    // Parse RX settings: RX_SETTINGS,map,rcmin,rcmid,rcmax,db_rc,db_yaw,db_thr3d,rc_smooth,rc_coeff,steer_ch,thr_ch,steer_rev,thr_rev
+    if (line.startsWith("RX_SETTINGS,")) {
+      const parts = line.split(",");
+      if (parts.length >= 14) {
+        setReceiverSettings({
+          channelMap: parts[1],
+          rcMin: parseInt(parts[2]) || 1000,
+          rcMid: parseInt(parts[3]) || 1500,
+          rcMax: parseInt(parts[4]) || 2000,
+          deadbandRc: parseInt(parts[5]) || 0,
+          deadbandYaw: parseInt(parts[6]) || 0,
+          deadbandThr3d: parseInt(parts[7]) || 0,
+          rcSmoothing: parts[8] === "1",
+          rcSmoothingCoeff: parseInt(parts[9]) || 30,
+          steeringChannel: parseInt(parts[10]) || 1,
+          throttleChannel: parseInt(parts[11]) || 2,
+          steeringRev: parts[12] === "1",
+          throttleRev: parts[13] === "1",
+        });
+      }
+      return;
+    }
+
+    // Parse GPS settings: GPS_SETTINGS,protocol,auto,galileo,home,assist,decl
+    if (line.startsWith("GPS_SETTINGS,")) {
+      const parts = line.split(",");
+      if (parts.length >= 7) {
+        setGpsSettings({
+          protocol: parts[1],
+          autoConfig: parts[2] === "1",
+          useGalileo: parts[3] === "1",
+          setHomeOnce: parts[4] === "1",
+          groundAssistance: parts[5],
+          declination: parseFloat(parts[6]) || 0.0,
+        });
+      }
+      return;
+    }
+
+    // Parse ELRS Data: ELRS_FULL,ch1...ch16,stats...
+    if (line.startsWith("ELRS_FULL,")) {
+        const parts = line.split(",");
+        // ELRS_FULL is index 0. channels 1-16 are indices 1-16. stats are 17-26
+        if (parts.length >= 27) {
+            const channels = parts.slice(1, 17).map(Number);
+            const stats = parts.slice(17).map(Number);
+            
+            setReceiverData({
+                channels,
+                uplinkRSS1: stats[0],
+                uplinkRSS2: stats[1],
+                uplinkLQ: stats[2],
+                uplinkSNR: stats[3],
+                activeAntenna: stats[4],
+                rfMode: stats[5],
+                uplinkTXPower: stats[6],
+                downlinkRSSI: stats[7],
+                downlinkLQ: stats[8],
+                downlinkSNR: stats[9]
+            });
+        }
+        return;
     }
 
     if (board) {
@@ -442,7 +445,7 @@ export function useSerial() {
             }
             
             setTimeout(() => {
-              send("PIN_TABLE");
+              send("FULL_CONFIG");
             }, 500);
           } else {
             console.log("No serial ports available for auto-connect");

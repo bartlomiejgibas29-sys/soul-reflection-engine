@@ -23,8 +23,8 @@ const TopHeader = ({ connected, deviceInfo, onConnect, onDisconnect }: TopHeader
       {/* Left: Logo */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 text-foreground font-black text-2xl tracking-tighter italic">
-          <Rocket className="text-yellow-500 w-6 h-6" />
-          <span>BETA<span className="text-yellow-500">DRIVE</span></span>
+          <Rocket className="text-primary w-6 h-6" />
+          <span>BETA<span className="text-primary">DRIVE</span></span>
         </div>
         {connected && deviceInfo && (
           <div className="text-xs text-muted-foreground leading-tight ml-2 border-l border-border pl-2">

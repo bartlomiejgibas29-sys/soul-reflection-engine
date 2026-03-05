@@ -10,6 +10,7 @@ import { useState, useEffect } from "react";
 import type { UartConfig } from "@/hooks/useSerial";
 import { Input } from "@/components/ui/input";
 import { RefreshCw, Save, ArrowLeftRight, Cable, AlertTriangle, Lightbulb } from "lucide-react";
+import { toast } from "sonner";
 
 const BAUD_OPTIONS = ["9600", "57600", "115200", "230400", "420000", "460800"];
 const LOW_BAUD_OPTIONS = ["9600", "57600", "115200"];
@@ -22,15 +23,6 @@ interface PortsPageProps {
 
 const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
   const [localConfigs, setLocalConfigs] = useState<UartConfig[]>([]);
-
-  useEffect(() => {
-    if (uartConfigs && uartConfigs.length > 0) {
-      setLocalConfigs(prev => {
-        if (prev.length === 0) return uartConfigs;
-        return prev;
-      });
-    }
-  }, [uartConfigs]);
 
   useEffect(() => {
     if (uartConfigs && uartConfigs.length > 0 && localConfigs.length === 0) {
@@ -55,6 +47,7 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
   };
 
   const handleSave = async () => {
+    toast.info("Saving configuration...", { duration: 10000 });
     try {
       await onSend("DISABLE_ALL");
       await new Promise(resolve => setTimeout(resolve, 300));
@@ -74,19 +67,20 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
 
       for (const c of cmds) {
         await onSend(c);
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 50)); // Szybsze wysyłanie
       }
 
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 500));
+      toast.info("Rebooting device...", { duration: 5000 });
       await onSend("REBOOT");
 
       setTimeout(() => {
         localStorage.setItem("shouldAutoConnect", "true");
         window.location.reload();
-      }, 3000);
+      }, 1500); // Szybszy reload
     } catch (error) {
       console.error("Save error:", error);
-      alert("Error saving configuration: " + error);
+      toast.error("Error saving configuration: " + error);
     }
   };
 

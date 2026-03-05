@@ -10,20 +10,24 @@ bool isPinAvailable(int pin, const char* label) {
         return false;
     }
 
-    // 2. Blokada duplikatów MIĘDZY portami (czy ten pin nie jest już używany przez INNY port)
+    // 2. Blokada duplikatów MIĘDZY portami oraz wewnątrz portu
     String l = String(label);
     if (l.startsWith("u1")) {
-        if (pin == u2_rx || pin == u2_tx || pin == u3_rx || pin == u3_tx) {
+        if (pin == u1_rx || pin == u1_tx) {
+            // Pozwalamy na zapis tego samego pinu co obecnie (update)
+            // Ale nie pozwalamy na RX=TX (chyba że to -1)
+        }
+        if (pin != -1 && (pin == u2_rx || pin == u2_tx || pin == u3_rx || pin == u3_tx)) {
             Serial.printf("!!! BLAD: Pin %d jest juz uzywany przez inny port UART!\n", pin);
             return false;
         }
     } else if (l.startsWith("u2")) {
-        if (pin == u1_rx || pin == u1_tx || pin == u3_rx || pin == u3_tx) {
+        if (pin != -1 && (pin == u1_rx || pin == u1_tx || pin == u3_rx || pin == u3_tx)) {
             Serial.printf("!!! BLAD: Pin %d jest juz uzywany przez inny port UART!\n", pin);
             return false;
         }
     } else if (l.startsWith("u3")) {
-        if (pin == u1_rx || pin == u1_tx || pin == u2_rx || pin == u2_tx) {
+        if (pin != -1 && (pin == u1_rx || pin == u1_tx || pin == u2_rx || pin == u2_tx)) {
             Serial.printf("!!! BLAD: Pin %d jest juz uzywany przez inny port UART!\n", pin);
             return false;
         }

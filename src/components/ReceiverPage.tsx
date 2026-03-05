@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { ReceiverData, ReceiverSettings } from "@/hooks/useSerial";
-import { Radio, Signal, Zap, Antenna, Activity, RefreshCw, Gamepad2 } from "lucide-react";
+import { Radio, Signal, Zap, Antenna, Activity, RefreshCw, Gamepad2, ChevronUp, ChevronDown, SlidersHorizontal } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -66,9 +66,12 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
 
   const steeringCh = form?.steeringChannel ?? 1;
   const throttleCh = form?.throttleChannel ?? 2;
+  const speedCh = form?.speedChannel ?? 2;
+  const directionCh = form?.directionChannel ?? 5;
   const channels = data?.channels || Array(16).fill(1500);
   const steering = channels[steeringCh - 1] || 1500;
   const throttle = channels[throttleCh - 1] || 1500;
+  const speed = channels[speedCh - 1] || 1000;
   const isLoaded = !!form;
 
   const CenterBar = ({ label, value, leftLabel, rightLabel, colorClass }: {
@@ -76,7 +79,7 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
   }) => {
     const pct = ((value - 1000) / 1000) * 100;
     return (
-      <div className="space-y-1.5">
+      <div className="space-y-1.5 w-full">
         <div className="flex justify-between items-center">
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{leftLabel}</span>
           <span className="text-xs font-semibold text-foreground">{label}</span>
@@ -99,6 +102,56 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
     );
   };
 
+  const VerticalBar = ({ label, value, topLabel, bottomLabel, colorClass }: {
+    label: string; value: number; topLabel: string; bottomLabel: string; colorClass: string;
+  }) => {
+    const pct = ((value - 1000) / 1000) * 100;
+    return (
+      <div className="flex flex-col items-center h-full space-y-2 py-2 w-14 border-r border-border/20 pr-4">
+        <span className="text-[9px] text-muted-foreground uppercase text-center font-bold">{topLabel}</span>
+        <div className="relative flex-1 w-full bg-[hsl(0,0%,8%)] rounded-lg overflow-hidden border border-border/30">
+          <div className="absolute left-0 right-0 top-1/2 h-px bg-foreground/15 z-10" />
+          <div
+            className={`absolute left-1 right-1 ${colorClass} rounded-sm transition-all duration-75 ease-out`}
+            style={{
+              bottom: value >= 1500 ? '50%' : `${pct}%`,
+              top: value <= 1500 ? '50%' : `${100 - pct}%`,
+            }}
+          />
+          <div className="absolute inset-0 flex items-center justify-center text-[10px] font-mono font-bold text-foreground z-20 drop-shadow-md -rotate-90">
+            {value}
+          </div>
+        </div>
+        <span className="text-[9px] text-muted-foreground uppercase text-center font-bold">{bottomLabel}</span>
+        <span className="text-[10px] font-bold text-primary mt-2 uppercase tracking-tighter">{label}</span>
+      </div>
+    );
+  };
+
+  const FullRangeBar = ({ label, value, topLabel, bottomLabel, colorClass }: {
+    label: string; value: number; topLabel: string; bottomLabel: string; colorClass: string;
+  }) => {
+    const pct = Math.max(0, Math.min(100, ((value - 1000) / 1000) * 100));
+    return (
+      <div className="flex flex-col items-center h-full space-y-2 py-2 w-14 border-r border-border/20 pr-4">
+        <span className="text-[9px] text-muted-foreground uppercase text-center font-bold">{topLabel}</span>
+        <div className="relative flex-1 w-full bg-[hsl(0,0%,8%)] rounded-lg overflow-hidden border border-border/30">
+          <div
+            className={`absolute bottom-0 left-1 right-1 ${colorClass} rounded-sm transition-all duration-75 ease-out`}
+            style={{
+              height: `${pct}%`,
+            }}
+          />
+          <div className="absolute inset-0 flex items-center justify-center text-[10px] font-mono font-bold text-foreground z-20 drop-shadow-md -rotate-90">
+            {value}
+          </div>
+        </div>
+        <span className="text-[9px] text-muted-foreground uppercase text-center font-bold">{bottomLabel}</span>
+        <span className="text-[10px] font-bold text-primary mt-2 uppercase tracking-tighter">{label}</span>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full gap-4 overflow-y-auto">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
@@ -116,25 +169,96 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
             </div>
           </div>
 
-          <div className="p-5 space-y-5 overflow-y-auto flex-1">
-            <CenterBar label="Steering" value={steering} leftLabel="Left" rightLabel="Right" colorClass="bg-blue-500" />
-            <CenterBar label="Throttle" value={throttle} leftLabel="Brake/Rev" rightLabel="Forward" colorClass={throttle > 1500 ? "bg-[hsl(var(--sensor-ok))]" : "bg-destructive"} />
+          <div className="flex flex-1 overflow-hidden p-5 gap-6">
+            {/* Vertical Throttle / Speed */}
+            {form?.controlMode === 'DIRECTION_SELECTED' ? (
+              <FullRangeBar
+                label="Speed"
+                value={speed}
+                topLabel="Max"
+                bottomLabel="Min"
+                colorClass="bg-cyan-500"
+              />
+            ) : (
+              <VerticalBar 
+                label="Throttle" 
+                value={throttle} 
+                topLabel="Fwd" 
+                bottomLabel="Rev" 
+                colorClass={throttle > 1500 ? "bg-[hsl(var(--sensor-ok))]" : "bg-destructive"} 
+              />
+            )}
 
-            <div className="border-t border-border/20 pt-4">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2 block">AUX Channels</span>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                {channels.slice(4).map((val: number, idx: number) => {
-                  const pct = Math.max(0, Math.min(100, ((val - 1000) / 1000) * 100));
-                  return (
-                    <div key={`aux-${idx}`} className="flex items-center gap-2">
-                      <span className="text-[10px] text-muted-foreground w-10 font-mono">AUX{idx + 1}</span>
-                      <div className="flex-1 h-2 bg-[hsl(0,0%,8%)] rounded-full overflow-hidden border border-border/10">
-                        <div className="h-full bg-muted-foreground/50 rounded-full transition-all duration-75" style={{ width: `${pct}%` }} />
+            <div className="flex-1 flex flex-col gap-6 overflow-y-auto pr-2">
+              {/* Horizontal Steering (Top) */}
+              <CenterBar 
+                label="Steering" 
+                value={steering} 
+                leftLabel="Left" 
+                rightLabel="Right" 
+                colorClass="bg-blue-500" 
+              />
+
+              <div className="border-t border-border/20 pt-4">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider mb-3 block">Stick Inputs (CH1 - CH4)</span>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4 mb-6">
+                  {(() => {
+                    const map = form?.channelMap || "AETR";
+                    const expandedLabels: Record<string, string> = {
+                      'A': 'Cudtom',
+                      'E': 'Cudtom',
+                      'T': 'Throttle',
+                      'R': 'Steering'
+                    };
+
+                    return channels.slice(0, 4).map((val, idx) => {
+                      const channelNum = idx + 1;
+                      let label = '';
+
+                      if (channelNum === form?.steeringChannel) {
+                        label = 'Steering';
+                      } else if (channelNum === form?.throttleChannel) {
+                        label = 'Throttle';
+                      } else {
+                        label = expandedLabels[map[idx]] || `CH${channelNum}`;
+                      }
+                      
+                      const pct = Math.max(0, Math.min(100, ((val - 1000) / 1000) * 100));
+                      
+                      return (
+                        <div key={`stick-${idx}`} className="space-y-1">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-bold text-foreground">{label}</span>
+                            <span className="text-[10px] font-mono text-muted-foreground">{val}</span>
+                          </div>
+                          <div className="relative h-3 bg-[hsl(0,0%,8%)] rounded-full overflow-hidden border border-border/10">
+                            <div className="absolute top-0 bottom-0 left-1/2 w-px bg-foreground/20 z-10" />
+                            <div 
+                              className="h-full bg-primary/60 rounded-full transition-all duration-75" 
+                              style={{ width: `${pct}%` }} 
+                            />
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2 block">AUX Channels</span>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                  {channels.slice(4).map((val: number, idx: number) => {
+                    const pct = Math.max(0, Math.min(100, ((val - 1000) / 1000) * 100));
+                    return (
+                      <div key={`aux-${idx}`} className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground w-10 font-mono">AUX{idx + 1}</span>
+                        <div className="flex-1 h-2 bg-[hsl(0,0%,8%)] rounded-full overflow-hidden border border-border/10">
+                          <div className="h-full bg-muted-foreground/50 rounded-full transition-all duration-75" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-[10px] font-mono text-muted-foreground w-9 text-right">{val}</span>
                       </div>
-                      <span className="text-[10px] font-mono text-muted-foreground w-9 text-right">{val}</span>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
@@ -161,7 +285,7 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
               <div className="flex items-center gap-2">
                 <Radio size={14} className="text-primary" />
-                <span className="text-xs font-semibold text-foreground">Car Settings</span>
+                <span className="text-xs font-semibold text-foreground">Control Settings</span>
               </div>
               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSend("RX_SETTINGS")}>
                 <RefreshCw size={12} />
@@ -169,18 +293,50 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
             </div>
             
             <div className="p-4 space-y-3.5 text-xs">
+              {/* Control Mode */}
+              <div className="space-y-2 border-b border-border/20 pb-4">
+                <div className="flex items-center gap-2">
+                  <SlidersHorizontal size={12} className="text-muted-foreground" />
+                  <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Control Mode</Label>
+                </div>
+                <Select value={form?.controlMode || 'PROPORTIONAL'} onValueChange={(v) => handleSelectChange("controlMode", "SET_CONTROL_MODE", v)} disabled={!isLoaded}>
+                  <SelectTrigger className="h-8 w-full text-xs font-semibold">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PROPORTIONAL">Proportional Control</SelectItem>
+                    <SelectItem value="DIRECTION_SELECTED">Direction-Selected Throttle</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground leading-relaxed pt-1">
+                  {form?.controlMode === 'DIRECTION_SELECTED' 
+                    ? "Kierunek jazdy wybierany jest osobnym przełącznikiem, a prędkość sterowana jest niezależnym kanałem proporcjonalnym."
+                    : "Standardowe sterowanie proporcjonalne. Środek zakresu to neutral, góra to jazda do przodu, dół do tyłu."
+                  }
+                </p>
+              </div>
+
               {/* Steering */}
-              <div className="space-y-1">
+              <div className="space-y-1 pt-2">
                 <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Steering</Label>
                 <div className="flex items-center gap-2">
                   <Select value={steeringCh.toString()} onValueChange={(v) => handleSelectChange("steeringChannel", "SET_STEER_CH", v)} disabled={!isLoaded}>
-                    <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 16 }).map((_, i) => (
-                        <SelectItem key={i} value={(i + 1).toString()}>CH {i + 1}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                      <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectLabel>Channels</SelectLabel>
+                          {Array.from({ length: 4 }).map((_, i) => (
+                            <SelectItem key={i} value={(i + 1).toString()}>CH {i + 1}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                        <SelectGroup>
+                          <SelectLabel>Auxiliary</SelectLabel>
+                          {Array.from({ length: 12 }).map((_, i) => (
+                            <SelectItem key={i + 4} value={(i + 5).toString()}>AUX {i + 1}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
                   <div className="flex items-center gap-1 border border-border rounded-md px-2 h-7">
                     <Label className="text-[10px] text-muted-foreground">REV</Label>
                     <Switch className="scale-75 origin-right" checked={form?.steeringRev ?? false} onCheckedChange={(v) => handleSwitchChange("steeringRev", "SET_STEER_REV", v)} disabled={!isLoaded} />
@@ -188,24 +344,78 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
                 </div>
               </div>
 
-              {/* Throttle */}
-              <div className="space-y-1">
-                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Throttle</Label>
-                <div className="flex items-center gap-2">
-                  <Select value={throttleCh.toString()} onValueChange={(v) => handleSelectChange("throttleChannel", "SET_THR_CH", v)} disabled={!isLoaded}>
-                    <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 16 }).map((_, i) => (
-                        <SelectItem key={i} value={(i + 1).toString()}>CH {i + 1}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="flex items-center gap-1 border border-border rounded-md px-2 h-7">
-                    <Label className="text-[10px] text-muted-foreground">REV</Label>
-                    <Switch className="scale-75 origin-right" checked={form?.throttleRev ?? false} onCheckedChange={(v) => handleSwitchChange("throttleRev", "SET_THR_REV", v)} disabled={!isLoaded} />
+              {/* Throttle / Speed / Direction */}
+              {form?.controlMode === 'DIRECTION_SELECTED' ? (
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Direction Channel</Label>
+                    <Select value={(form?.directionChannel || 0).toString()} onValueChange={(v) => handleSelectChange("directionChannel", "SET_DIR_CH", v)} disabled={!isLoaded}>
+                      <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectLabel>Channels</SelectLabel>
+                          {Array.from({ length: 4 }).map((_, i) => (
+                            <SelectItem key={i} value={(i + 1).toString()}>CH {i + 1}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                        <SelectGroup>
+                          <SelectLabel>Auxiliary</SelectLabel>
+                          {Array.from({ length: 12 }).map((_, i) => (
+                            <SelectItem key={i + 4} value={(i + 5).toString()}>AUX {i + 1}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Speed Channel</Label>
+                    <Select value={(form?.speedChannel || 0).toString()} onValueChange={(v) => handleSelectChange("speedChannel", "SET_SPEED_CH", v)} disabled={!isLoaded}>
+                      <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectLabel>Channels</SelectLabel>
+                          {Array.from({ length: 4 }).map((_, i) => (
+                            <SelectItem key={i} value={(i + 1).toString()}>CH {i + 1}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                        <SelectGroup>
+                          <SelectLabel>Auxiliary</SelectLabel>
+                          {Array.from({ length: 12 }).map((_, i) => (
+                            <SelectItem key={i + 4} value={(i + 5).toString()}>AUX {i + 1}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-1">
+                  <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Throttle</Label>
+                  <div className="flex items-center gap-2">
+                    <Select value={throttleCh.toString()} onValueChange={(v) => handleSelectChange("throttleChannel", "SET_THR_CH", v)} disabled={!isLoaded}>
+                      <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectLabel>Channels</SelectLabel>
+                          {Array.from({ length: 4 }).map((_, i) => (
+                            <SelectItem key={i} value={(i + 1).toString()}>CH {i + 1}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                        <SelectGroup>
+                          <SelectLabel>Auxiliary</SelectLabel>
+                          {Array.from({ length: 12 }).map((_, i) => (
+                            <SelectItem key={i + 4} value={(i + 5).toString()}>AUX {i + 1}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <div className="flex items-center gap-1 border border-border rounded-md px-2 h-7">
+                      <Label className="text-[10px] text-muted-foreground">REV</Label>
+                      <Switch className="scale-75 origin-right" checked={form?.throttleRev ?? false} onCheckedChange={(v) => handleSwitchChange("throttleRev", "SET_THR_REV", v)} disabled={!isLoaded} />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* RC Ranges */}
               <div className="border-t border-border/20 pt-3">
