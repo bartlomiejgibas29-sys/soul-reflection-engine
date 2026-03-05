@@ -357,32 +357,31 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
                     : "Standardowe sterowanie proporcjonalne. Środek zakresu to neutral, góra to jazda do przodu, dół do tyłu."
                   }
                 </p>
-                </div>
+              </div>
 
               {/* Steering */}
               <div className="space-y-1 pt-2">
                 <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Steering</Label>
-                  <Select value={steeringCh.toString()} onValueChange={(v) => handleSelectChange("steeringChannel", "SET_STEER_CH", v)} disabled={!isLoaded}>
-                      <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectLabel>Channels</SelectLabel>
-                          {Array.from({ length: 4 }).map((_, i) => (
-                            <SelectItem key={i} value={(i + 1).toString()}>CH {i + 1}</SelectItem>
-                          ))}
-                        </SelectGroup>
-                        <SelectGroup>
-                          <SelectLabel>Auxiliary</SelectLabel>
-                          {Array.from({ length: 12 }).map((_, i) => (
-                            <SelectItem key={i + 4} value={(i + 5).toString()}>AUX {i + 1}</SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  <div className="flex items-center gap-1 border border-border rounded-md px-2 h-7">
-                    <Label className="text-[10px] text-muted-foreground">REV</Label>
-                    <Switch className="scale-75 origin-right" checked={form?.steeringRev ?? false} onCheckedChange={(v) => handleSwitchChange("steeringRev", "SET_STEER_REV", v)} disabled={!isLoaded} />
-                  </div>
+                <Select value={steeringCh.toString()} onValueChange={(v) => handleSelectChange("steeringChannel", "SET_STEER_CH", v)} disabled={!isLoaded}>
+                  <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Channels</SelectLabel>
+                      {Array.from({ length: 4 }).map((_, i) => (
+                        <SelectItem key={i} value={(i + 1).toString()}>CH {i + 1}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel>Auxiliary</SelectLabel>
+                      {Array.from({ length: 12 }).map((_, i) => (
+                        <SelectItem key={i + 4} value={(i + 5).toString()}>AUX {i + 1}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-1 border border-border rounded-md px-2 h-7">
+                  <Label className="text-[10px] text-muted-foreground">REV</Label>
+                  <Switch className="scale-75 origin-right" checked={form?.steeringRev ?? false} onCheckedChange={(v) => handleSwitchChange("steeringRev", "SET_STEER_REV", v)} disabled={!isLoaded} />
                 </div>
               </div>
 
