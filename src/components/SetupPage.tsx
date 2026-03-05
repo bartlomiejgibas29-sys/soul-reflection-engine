@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Cpu, RefreshCw, Trash2, Battery, Signal, Gauge, Download, Upload, ShieldAlert, Car } from "lucide-react";
@@ -12,9 +13,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import type { GpsData } from "@/hooks/useSerial";
 
 interface SetupPageProps {
   uartConfigs: any[];
+  gpsData?: GpsData | null;
   onSend: (cmd: string) => Promise<void> | void;
   onReboot: () => Promise<void> | void;
 }
@@ -26,7 +29,15 @@ const InfoRow = ({ label, value, valueColor }: { label: string; value: string; v
   </div>
 );
 
-const SetupPage = ({ uartConfigs, onSend, onReboot }: SetupPageProps) => {
+const SetupPage = ({ uartConfigs, gpsData, onSend, onReboot }: SetupPageProps) => {
+  useEffect(() => {
+    onSend("ENABLE_GPS_MODE");
+    const t = setTimeout(() => onSend("GPS_SETTINGS"), 300);
+    return () => {
+      clearTimeout(t);
+      onSend("DISABLE_GPS_MODE");
+    };
+  }, []);
   return (
     <div className="flex flex-col h-full gap-5 overflow-y-auto">
       {/* Top row: System actions + Backup */}
@@ -144,9 +155,13 @@ const SetupPage = ({ uartConfigs, onSend, onReboot }: SetupPageProps) => {
               <span className="text-xs font-semibold text-foreground">GPS Status</span>
             </div>
             <div className="p-4">
-              <InfoRow label="3D Fix" value="False" valueColor="text-destructive" />
-              <InfoRow label="Satellites" value="0" />
-              <InfoRow label="DOP" value="—" />
+              <InfoRow
+                label="3D Fix"
+                value={gpsData?.fix ? "True" : "False"}
+                valueColor={gpsData?.fix ? "text-[hsl(var(--sensor-ok))]" : "text-destructive"}
+              />
+              <InfoRow label="Satellites" value={`${gpsData?.numSatellites ?? 0}`} />
+              <InfoRow label="DOP" value={gpsData && gpsData.dop > 0 ? gpsData.dop.toFixed(2) : "—"} />
             </div>
           </div>
         </div>

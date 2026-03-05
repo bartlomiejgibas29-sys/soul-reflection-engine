@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import type { ReceiverData, ReceiverSettings } from "@/hooks/useSerial";
-import { Radio, Signal, Zap, Antenna, Activity, RefreshCw, Gamepad2, ChevronUp, ChevronDown, SlidersHorizontal } from "lucide-react";
+import { Radio, Signal, Zap, Antenna, Activity, RefreshCw, Gamepad2, ChevronUp, ChevronDown, SlidersHorizontal, Save as SaveIcon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 interface ReceiverPageProps {
   data: ReceiverData | null;
@@ -72,6 +73,11 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
   const steering = channels[steeringCh - 1] || 1500;
   const throttle = channels[throttleCh - 1] || 1500;
   const speed = channels[speedCh - 1] || 1000;
+  const directionVal = channels[directionCh - 1] || 1000;
+  const reversePressed = form?.directionPressedIsReverse ?? false;
+  const isReverse = form?.controlMode === 'DIRECTION_SELECTED'
+    ? (reversePressed ? directionVal > 1500 : directionVal < 1500)
+    : false;
   const isLoaded = !!form;
 
   const CenterBar = ({ label, value, leftLabel, rightLabel, colorClass }: {
@@ -152,8 +158,45 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
     );
   };
 
+  const handleSaveAll = async () => {
+    if (!form) return;
+    toast.info("Saving receiver settings...", { duration: 4000 });
+    const cmds: string[] = [];
+    // Control mode
+    if (form.controlMode) cmds.push(`SET_CONTROL_MODE:${form.controlMode}`);
+    // Steering
+    cmds.push(`SET_STEER_CH:${form.steeringChannel}`);
+    cmds.push(`SET_STEER_REV:${form.steeringRev ? 1 : 0}`);
+    // Throttle or Direction/Speed depending on mode
+    if (form.controlMode === "DIRECTION_SELECTED") {
+      cmds.push(`SET_DIR_CH:${form.directionChannel}`);
+      cmds.push(`SET_SPEED_CH:${form.speedChannel}`);
+    } else {
+      cmds.push(`SET_THR_CH:${form.throttleChannel}`);
+      cmds.push(`SET_THR_REV:${form.throttleRev ? 1 : 0}`);
+    }
+    // RC ranges and smoothing
+    cmds.push(`SET_RC_MIN:${form.rcMin}`);
+    cmds.push(`SET_RC_MID:${form.rcMid}`);
+    cmds.push(`SET_RC_MAX:${form.rcMax}`);
+    cmds.push(`SET_RC_SMOOTH:${form.rcSmoothing ? 1 : 0}`);
+    if (form.rcSmoothing) {
+      cmds.push(`SET_RC_SMOOTH_COEFF:${form.rcSmoothingCoeff}`);
+    }
+    // Send in sequence with small delay
+    for (const c of cmds) {
+      try {
+        await Promise.resolve(onSend(c));
+        await new Promise(r => setTimeout(r, 60));
+      } catch {}
+    }
+    await new Promise(r => setTimeout(r, 150));
+    onSend("RX_SETTINGS");
+    toast.success("Receiver settings saved");
+  };
+
   return (
-    <div className="flex flex-col h-full gap-4 overflow-y-auto">
+    <div className="flex flex-col h-full gap-4 overflow-y-auto pb-16">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
         
         {/* LEFT: Channel Monitor */}
@@ -177,7 +220,7 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
                 value={speed}
                 topLabel="Max"
                 bottomLabel="Min"
-                colorClass="bg-cyan-500"
+                colorClass={isReverse ? "bg-destructive" : "bg-cyan-500"}
               />
             ) : (
               <VerticalBar 
@@ -314,12 +357,11 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
                     : "Standardowe sterowanie proporcjonalne. Środek zakresu to neutral, góra to jazda do przodu, dół do tyłu."
                   }
                 </p>
-              </div>
+                </div>
 
               {/* Steering */}
               <div className="space-y-1 pt-2">
                 <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Steering</Label>
-                <div className="flex items-center gap-2">
                   <Select value={steeringCh.toString()} onValueChange={(v) => handleSelectChange("steeringChannel", "SET_STEER_CH", v)} disabled={!isLoaded}>
                       <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -387,6 +429,15 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="flex items-center justify-between pt-1">
+                    <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Reverse on Press</Label>
+                    <Switch
+                      className="scale-75 origin-right"
+                      checked={form?.directionPressedIsReverse ?? false}
+                      onCheckedChange={(v) => handleSwitchChange("directionPressedIsReverse", "SET_DIR_POL", v)}
+                      disabled={!isLoaded}
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -448,6 +499,15 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
                     <Input type="number" className="h-7 w-20 text-xs font-mono" value={form?.rcSmoothingCoeff ?? 30} onChange={(e) => handleInputChange("rcSmoothingCoeff", e.target.value)} onBlur={() => handleInputBlur("SET_RC_SMOOTH_COEFF", form?.rcSmoothingCoeff)} />
                   </div>
                 )}
+              </div>
+              <div className="pt-2 flex justify-end">
+                <Button
+                  className="h-9 px-8 bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs gap-2 shadow-lg shadow-primary/20 rounded-md"
+                  onClick={handleSaveAll}
+                >
+                  <SaveIcon size={14} />
+                  SAVE
+                </Button>
               </div>
             </div>
           </div>

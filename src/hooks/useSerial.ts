@@ -55,6 +55,7 @@ export interface ReceiverSettings {
   controlMode: "PROPORTIONAL" | "DIRECTION_SELECTED";
   directionChannel: number;
   speedChannel: number;
+  directionPressedIsReverse?: boolean;
   channelMap: string;
   rcMin: number;
   rcMid: number;
@@ -132,6 +133,21 @@ export function useSerial() {
       return;
     }
 
+    // Parse Device info: DEVICE,type,version
+    if (line.startsWith("DEVICE,")) {
+      const parts = line.split(",");
+      if (parts.length >= 3) {
+        const devType = parts[1] || "esp32c3";
+        const version = parts[2] || "1.0.0";
+        setDeviceInfo({
+          configurator: "1.0.0",
+          firmware: version,
+          target: devType,
+        });
+      }
+      return;
+    }
+
     // Parse GPS Data: GPS_FULL,fix,sats,lat,lon,alt,speed,course,hdop
     if (line.startsWith("GPS_FULL,")) {
       const parts = line.split(",");
@@ -172,14 +188,19 @@ export function useSerial() {
       return;
     }
 
-    // Parse RX settings: RX_SETTINGS,map,rcmin,rcmid,rcmax,db_rc,db_yaw,db_thr3d,rc_smooth,rc_coeff,steer_ch,thr_ch,steer_rev,thr_rev
+    // Parse RX settings: RX_SETTINGS,map,rcmin,rcmid,rcmax,db_rc,db_yaw,db_thr3d,rc_smooth,rc_coeff,steer_ch,thr_ch,steer_rev,thr_rev[,control_mode,dir_ch,speed_ch,dir_pol]
     if (line.startsWith("RX_SETTINGS,")) {
       const parts = line.split(",");
       if (parts.length >= 14) {
+        const ctrlMode = parts.length >= 15 ? (parts[14] as "PROPORTIONAL" | "DIRECTION_SELECTED") : "PROPORTIONAL";
+        const dirCh = parts.length >= 16 ? parseInt(parts[15]) || 1 : 1;
+        const spdCh = parts.length >= 17 ? parseInt(parts[16]) || 2 : 2;
+        const dirPol = parts.length >= 18 ? parts[17] === "1" : false;
         setReceiverSettings({
-          controlMode: "PROPORTIONAL",
-          directionChannel: 1,
-          speedChannel: 2,
+          controlMode: ctrlMode,
+          directionChannel: dirCh,
+          speedChannel: spdCh,
+          directionPressedIsReverse: dirPol,
           channelMap: parts[1],
           rcMin: parseInt(parts[2]) || 1000,
           rcMid: parseInt(parts[3]) || 1500,
@@ -420,47 +441,43 @@ export function useSerial() {
   }, [readLoop, send, connected, disconnect]);
 
   useEffect(() => {
-    const shouldConnect = localStorage.getItem("shouldAutoConnect");
-    if (shouldConnect === "true") {
-      localStorage.removeItem("shouldAutoConnect");
-      const lastBaud = parseInt(localStorage.getItem("lastBaudRate") || "115200");
-      
-      (async () => {
-        if (!("serial" in navigator)) return;
-        
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        try {
-          const ports = await (navigator as any).serial.getPorts();
-          if (ports.length > 0) {
-            const port = ports[0];
-            await port.open({ baudRate: lastBaud });
-            portRef.current = port;
-            setConnected(true);
-            setLastSent("Auto-connected after restart");
-            setLogs(prev => [...prev, `[System] Auto-connected at ${lastBaud} baud after restart\n`]);
-            bufferRef.current = "";
-            
-            if (port.readable) {
-              const reader = port.readable.getReader();
-              readerRef.current = reader;
-              readLoop(reader);
-            }
-            
-            setTimeout(() => {
-              send("FULL_CONFIG");
-            }, 500);
-          } else {
-            console.log("No serial ports available for auto-connect");
-            setLogs(prev => [...prev, `[System] No serial ports available for auto-connect\n`]);
+    const shouldOnce = localStorage.getItem("shouldAutoConnect") === "true";
+    const autoEnabled = localStorage.getItem("autoConnectEnabled") === "true";
+    if (!shouldOnce && !autoEnabled) return;
+    if (shouldOnce) localStorage.removeItem("shouldAutoConnect");
+    const lastBaud = parseInt(localStorage.getItem("lastBaudRate") || "115200");
+    
+    (async () => {
+      if (!("serial" in navigator)) return;
+      await new Promise(resolve => setTimeout(resolve, shouldOnce ? 2000 : 500));
+      try {
+        const ports = await (navigator as any).serial.getPorts();
+        if (ports.length > 0) {
+          const port = ports[0];
+          await port.open({ baudRate: lastBaud });
+          portRef.current = port;
+          setConnected(true);
+          setLastSent(shouldOnce ? "Auto-connected after restart" : "Auto-connected");
+          setLogs(prev => [...prev, `[System] Auto-connected at ${lastBaud} baud${shouldOnce ? " after restart" : ""}\n`]);
+          bufferRef.current = "";
+          
+          if (port.readable) {
+            const reader = port.readable.getReader();
+            readerRef.current = reader;
+            readLoop(reader);
           }
-        } catch (err) {
-          console.error("Auto-connect error:", err);
-          setLogs(prev => [...prev, `Auto-connect error: ${err}\n`]);
-          localStorage.removeItem("shouldAutoConnect");
+          
+          setTimeout(() => {
+            send("FULL_CONFIG");
+          }, 500);
+        } else {
+          setLogs(prev => [...prev, `[System] No serial ports available for auto-connect\n`]);
         }
-      })();
-    }
+      } catch (err:any) {
+        console.error("Auto-connect error:", err);
+        setLogs(prev => [...prev, `Auto-connect error: ${err?.message || err}\n`]);
+      }
+    })();
   }, [readLoop, send]);
 
   useEffect(() => {

@@ -26,6 +26,11 @@ int steering_ch = 1;
 int throttle_ch = 2;
 bool steering_rev = false;
 bool throttle_rev = false;
+// Tryb sterowania i kanały dla trybu kierunek+prędkość
+String control_mode = "PROPORTIONAL"; // lub "DIRECTION_SELECTED"
+int direction_ch = 5; // domyślnie AUX1
+int speed_ch = 2;     // domyślnie CH2
+bool dir_pressed_is_reverse = false; // domyślnie: wciśnięty = przód
 
 // GPS Settings
 String gps_protocol = "UBLOX";
@@ -86,6 +91,10 @@ void loadSettings() {
     throttle_ch = prefs.getInt("thr_ch", 2);
     steering_rev = prefs.getBool("steer_rev", false);
     throttle_rev = prefs.getBool("thr_rev", false);
+    control_mode = prefs.getString("ctrl_mode", "PROPORTIONAL");
+    direction_ch = prefs.getInt("dir_ch", 5);
+    speed_ch = prefs.getInt("spd_ch", 2);
+    dir_pressed_is_reverse = prefs.getBool("dir_pol", false);
 
     // GPS settings
     gps_protocol = prefs.getString("gps_proto", "UBLOX");

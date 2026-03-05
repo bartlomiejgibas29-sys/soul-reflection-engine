@@ -63,7 +63,7 @@ const Index = () => {
               <h1 className="text-2xl font-light text-foreground mb-4 shrink-0">{activeTab}</h1>
               
               <div className="flex-1 overflow-y-auto min-h-0">
-                {activeTab === "Setup" && <SetupPage uartConfigs={uartConfigs} onSend={send} onReboot={reboot} />}
+                {activeTab === "Setup" && <SetupPage uartConfigs={uartConfigs} onSend={send} onReboot={reboot} gpsData={gpsData} />}
                 
                 {activeTab === "Ports" && <PortsPage uartConfigs={uartConfigs} connected={connected} onSend={send} />}
                 

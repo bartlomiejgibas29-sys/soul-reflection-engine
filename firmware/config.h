@@ -46,6 +46,11 @@ extern int steering_ch; // Numer kanału dla skrętu (1-16)
 extern int throttle_ch; // Numer kanału dla gazu (1-16)
 extern bool steering_rev; // Odwrócenie skrętu
 extern bool throttle_rev; // Odwrócenie gazu
+// Tryb sterowania i kanały dla trybu kierunek+prędkość
+extern String control_mode; // "PROPORTIONAL" | "DIRECTION_SELECTED"
+extern int direction_ch;    // Kanał wyboru kierunku
+extern int speed_ch;        // Kanał prędkości
+extern bool dir_pressed_is_reverse; // true: wciśnięty = wstecz; false: spoczynek = wstecz
 
 
 // GPS Settings

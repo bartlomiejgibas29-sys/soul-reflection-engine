@@ -1,5 +1,5 @@
 import { Usb, Unplug, Rocket } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Select,
   SelectContent,
@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 interface TopHeaderProps {
   connected: boolean;
@@ -17,6 +18,21 @@ interface TopHeaderProps {
 
 const TopHeader = ({ connected, deviceInfo, onConnect, onDisconnect }: TopHeaderProps) => {
   const [baudRate, setBaudRate] = useState("115200");
+  const [autoConnect, setAutoConnect] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("autoConnectEnabled");
+      setAutoConnect(saved === "true");
+    } catch {}
+  }, []);
+
+  const toggleAuto = (v: boolean) => {
+    setAutoConnect(v);
+    try {
+      localStorage.setItem("autoConnectEnabled", v ? "true" : "false");
+    } catch {}
+  };
 
   return (
     <header className="flex items-center justify-between bg-header px-4 py-2 border-b border-border">
@@ -41,24 +57,29 @@ const TopHeader = ({ connected, deviceInfo, onConnect, onDisconnect }: TopHeader
       {/* Right: Connect/Disconnect */}
       <div className="flex items-center gap-4">
         {!connected && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Baud:</span>
-            <Select value={baudRate} onValueChange={setBaudRate}>
-              <SelectTrigger className="h-8 w-[100px] text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="9600">9600</SelectItem>
-                <SelectItem value="57600">57600</SelectItem>
-                <SelectItem value="115200">115200</SelectItem>
-                <SelectItem value="230400">230400</SelectItem>
-                <SelectItem value="460800">460800</SelectItem>
-                <SelectItem value="921600">921600</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Baud:</span>
+              <Select value={baudRate} onValueChange={setBaudRate}>
+                <SelectTrigger className="h-8 w-[100px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="9600">9600</SelectItem>
+                  <SelectItem value="57600">57600</SelectItem>
+                  <SelectItem value="115200">115200</SelectItem>
+                  <SelectItem value="230400">230400</SelectItem>
+                  <SelectItem value="460800">460800</SelectItem>
+                  <SelectItem value="921600">921600</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-muted-foreground">Auto  -  Connect</span>
+              <Switch className="scale-75" checked={autoConnect} onCheckedChange={toggleAuto} />
+            </div>
           </div>
         )}
-
         {connected ? (
           <button
             onClick={onDisconnect}

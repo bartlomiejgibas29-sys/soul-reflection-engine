@@ -180,6 +180,8 @@ void handleCommands() {
         }
 
         else if (cmd == "FULL_CONFIG") {
+            // Device Info (type and firmware version)
+            Serial.println("DEVICE,esp32c3,1.0.0");
             // UART Configs
             Serial.printf("UART_CONF,1,%s,%d,%d,%ld,%s\n", u1_enabled?"ENABLED":"DISABLED", u1_rx, u1_tx, u1_baud, u1_type.c_str());
             Serial.printf("UART_CONF,2,%s,%d,%d,%ld,%s\n", u2_enabled?"ENABLED":"DISABLED", u2_rx, u2_tx, u2_baud, u2_type.c_str());
@@ -199,7 +201,11 @@ void handleCommands() {
             Serial.print(steering_ch); Serial.print(",");
             Serial.print(throttle_ch); Serial.print(",");
             Serial.print(steering_rev ? 1 : 0); Serial.print(",");
-            Serial.println(throttle_rev ? 1 : 0);
+            Serial.print(throttle_rev ? 1 : 0); Serial.print(",");
+            Serial.print(control_mode); Serial.print(",");
+            Serial.print(direction_ch); Serial.print(",");
+            Serial.print(speed_ch); Serial.print(",");
+            Serial.println(dir_pressed_is_reverse ? 1 : 0);
 
             // GPS Settings
             Serial.print("GPS_SETTINGS,");
@@ -226,7 +232,11 @@ void handleCommands() {
             Serial.print(steering_ch); Serial.print(",");
             Serial.print(throttle_ch); Serial.print(",");
             Serial.print(steering_rev ? 1 : 0); Serial.print(",");
-            Serial.println(throttle_rev ? 1 : 0);
+            Serial.print(throttle_rev ? 1 : 0); Serial.print(",");
+            Serial.print(control_mode); Serial.print(",");
+            Serial.print(direction_ch); Serial.print(",");
+            Serial.print(speed_ch); Serial.print(",");
+            Serial.println(dir_pressed_is_reverse ? 1 : 0);
         }
 
         else if (cmd == "GPS_SETTINGS") {
@@ -273,6 +283,10 @@ void handleCommands() {
         else if (cmd.startsWith("SET_THR_CH:")) { saveInt("thr_ch", cmd.substring(11).toInt(), throttle_ch); }
         else if (cmd.startsWith("SET_STEER_REV:")) { saveEnabled("steer_rev", cmd.substring(14).toInt() == 1, steering_rev); }
         else if (cmd.startsWith("SET_THR_REV:")) { saveEnabled("thr_rev", cmd.substring(12).toInt() == 1, throttle_rev); }
+        else if (cmd.startsWith("SET_CONTROL_MODE:")) { saveType("ctrl_mode", cmd.substring(17), control_mode); }
+        else if (cmd.startsWith("SET_DIR_CH:")) { saveInt("dir_ch", cmd.substring(11).toInt(), direction_ch); }
+        else if (cmd.startsWith("SET_SPEED_CH:")) { saveInt("spd_ch", cmd.substring(13).toInt(), speed_ch); }
+        else if (cmd.startsWith("SET_DIR_POL:")) { saveEnabled("dir_pol", cmd.substring(12).toInt() == 1, dir_pressed_is_reverse); }
 
         // GPS settings commands
         else if (cmd.startsWith("SET_GPS_PROTOCOL:")) { saveType("gps_proto", cmd.substring(17), gps_protocol); }
