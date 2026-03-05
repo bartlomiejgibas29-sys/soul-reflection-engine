@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import type { ReceiverData, ReceiverSettings } from "@/hooks/useSerial";
 import { Radio, Signal, Zap, Antenna, Activity, RefreshCw, Gamepad2, ChevronUp, ChevronDown, SlidersHorizontal, Save as SaveIcon } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -30,10 +30,13 @@ const StatCard = ({ icon: Icon, label, value, unit, accent }: {
 );
 
 const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
+  const onSendRef = useRef(onSend);
+  onSendRef.current = onSend;
+
   useEffect(() => {
-    onSend("ENABLE_RECEIVER_MODE");
-    onSend("RX_SETTINGS");
-    return () => { onSend("DISABLE_RECEIVER_MODE"); };
+    onSendRef.current("ENABLE_RECEIVER_MODE");
+    onSendRef.current("RX_SETTINGS");
+    return () => { onSendRef.current("DISABLE_RECEIVER_MODE"); };
   }, []);
 
   const [form, setForm] = useState<ReceiverSettings | null>(null);
@@ -248,8 +251,8 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
                   {(() => {
                     const map = form?.channelMap || "AETR";
                     const expandedLabels: Record<string, string> = {
-                      'A': 'Cudtom',
-                      'E': 'Cudtom',
+                      'A': 'Custom',
+                      'E': 'Custom',
                       'T': 'Throttle',
                       'R': 'Steering'
                     };
@@ -390,7 +393,7 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
                 <div className="space-y-3">
                   <div className="space-y-1">
                     <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Direction Channel</Label>
-                    <Select value={(form?.directionChannel || 0).toString()} onValueChange={(v) => handleSelectChange("directionChannel", "SET_DIR_CH", v)} disabled={!isLoaded}>
+                    <Select value={(form?.directionChannel || 5).toString()} onValueChange={(v) => handleSelectChange("directionChannel", "SET_DIR_CH", v)} disabled={!isLoaded}>
                       <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
@@ -410,7 +413,7 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">Speed Channel</Label>
-                    <Select value={(form?.speedChannel || 0).toString()} onValueChange={(v) => handleSelectChange("speedChannel", "SET_SPEED_CH", v)} disabled={!isLoaded}>
+                    <Select value={(form?.speedChannel || 2).toString()} onValueChange={(v) => handleSelectChange("speedChannel", "SET_SPEED_CH", v)} disabled={!isLoaded}>
                       <SelectTrigger className="h-7 flex-1 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
