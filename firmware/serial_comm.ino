@@ -13,10 +13,6 @@ bool isPinAvailable(int pin, const char* label) {
     // 2. Blokada duplikatów MIĘDZY portami oraz wewnątrz portu
     String l = String(label);
     if (l.startsWith("u1")) {
-        if (pin == u1_rx || pin == u1_tx) {
-            // Pozwalamy na zapis tego samego pinu co obecnie (update)
-            // Ale nie pozwalamy na RX=TX (chyba że to -1)
-        }
         if (pin != -1 && (pin == u2_rx || pin == u2_tx || pin == u3_rx || pin == u3_tx)) {
             Serial.printf("!!! BLAD: Pin %d jest juz uzywany przez inny port UART!\n", pin);
             return false;
@@ -133,16 +129,28 @@ void restartUART3() {
 // Deklaracje funkcji z gps_logic.ino
 void configureGps();
 
+String commandBuf = "";
+
 void handleCommands() {
-    if (Serial.available() > 0) {
-        String cmd = Serial.readStringUntil('\n');
-        cmd.trim();
-        if (cmd.length() == 0) return;
+    while (Serial.available() > 0) {
+        char c = Serial.read();
+        if (c == '\n' || c == '\r') {
+            commandBuf.trim();
+            if (commandBuf.length() > 0) {
+                processCommand(commandBuf);
+            }
+            commandBuf = "";
+        } else {
+            commandBuf += c;
+        }
+    }
+}
 
-        Serial.println("> Komenda: " + cmd);
+void processCommand(String cmd) {
+    Serial.println("> Komenda: " + cmd);
 
-        // Systemowe
-        if (cmd == "HARD RESET") {
+    // Systemowe
+    if (cmd == "HARD RESET") {
             Serial.println("!!! CZYSZCZENIE PAMIECI I REBOOT !!!");
             // wyłącz wszystkie porty od razu, aby zwolnić piny
             Serial1.end();

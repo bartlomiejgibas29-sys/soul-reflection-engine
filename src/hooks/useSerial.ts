@@ -94,6 +94,7 @@ export function useSerial() {
   const portRef = useRef<any>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const bufferRef = useRef<string>("");
+  const writeChainRef = useRef<Promise<void>>(Promise.resolve());
 
   const parseBoardResponse = useCallback((line: string) => {
     line = line.trim();
@@ -163,13 +164,23 @@ export function useSerial() {
         const base = Math.max(0, Math.min(100, Math.round(100 / Math.max(1, dop))));
         const sats =
           numSat > 0
-            ? Array.from({ length: numSat }).map((_, i) => ({
-                gnssId: "GPS",
-                satId: i + 1,
-                signalStrength: Math.max(10, Math.min(100, base - i * 3)),
-                status: (fix ? "used" : "unused") as "used" | "unused",
-                quality: (fix ? "fully locked" : "searching") as GpsSatellite["quality"],
-              }))
+            ? Array.from({ length: numSat }).map((_, i) => {
+                // Realistic PRN numbers: GPS (1-32), GLONASS (65-88), Galileo (101-136)
+                const satId = i < 8 ? (i + 1) : (i < 12 ? (i + 57) : (i + 89));
+                const gnssId = satId <= 32 ? "GPS" : (satId <= 88 ? "GLO" : "GAL");
+                
+                // Signal strength (C/N0) usually 20-50 dB-Hz
+                const signalStrength = Math.max(15, Math.min(48, Math.round(45 - (i * 2.5) - (dop * 2) + Math.random() * 5)));
+                const isUsed = fix && i < (numSat - 2); // Assume some are not used in fix
+                
+                return {
+                  gnssId,
+                  satId,
+                  signalStrength,
+                  status: (isUsed ? "used" : "unused") as "used" | "unused",
+                  quality: (isUsed ? "fully locked" : "searching") as GpsSatellite["quality"],
+                };
+              })
             : [];
         setGpsData({
           fix,
@@ -271,19 +282,24 @@ export function useSerial() {
 
   const send = useCallback(async (data: string) => {
     if (!portRef.current || !portRef.current.writable) return;
-    
-    try {
-        const writer = portRef.current.writable.getWriter();
+    writeChainRef.current = writeChainRef.current.then(async () => {
+      let writer: any = null;
+      try {
+        writer = portRef.current.writable.getWriter();
         const encoded = new TextEncoder().encode(data + "\n");
         await writer.write(encoded);
-        writer.releaseLock();
-        
         setLastSent(`TX: ${data}`);
         setLogs(prev => [...prev, `> ${data}\n`]);
-    } catch (err) {
+      } catch (err: any) {
         console.error("Send error:", err);
         setLogs(prev => [...prev, `Error sending: ${err}\n`]);
-    }
+      } finally {
+        try {
+          if (writer) writer.releaseLock();
+        } catch {}
+      }
+    });
+    return writeChainRef.current;
   }, []);
 
   const readLoop = useCallback(async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
@@ -368,6 +384,7 @@ export function useSerial() {
     setLastSent("Disconnected");
     setLogs(prev => [...prev, `[System] Disconnected\n`]);
     bufferRef.current = "";
+    writeChainRef.current = Promise.resolve();
   }, []);
 
   const connect = useCallback(async (baudRate: number = 115200) => {

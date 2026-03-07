@@ -73,14 +73,29 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
   const speedCh = form?.speedChannel ?? 2;
   const directionCh = form?.directionChannel ?? 5;
   const channels = data?.channels || Array(16).fill(1500);
-  const steering = channels[steeringCh - 1] || 1500;
-  const throttle = channels[throttleCh - 1] || 1500;
+  
+  // Calculate visual values (considering REV for Steering/Throttle)
+  const rcMid = form?.rcMid ?? 1500;
+  
+  let steering = channels[steeringCh - 1] || 1500;
+  if (form?.steeringRev) {
+    steering = rcMid + (rcMid - steering);
+  }
+  
+  let throttle = channels[throttleCh - 1] || 1500;
+  // If we ever want visual REV for throttle too, it would go here:
+  // if (form?.throttleRev && form?.controlMode !== 'DIRECTION_SELECTED') {
+  //   throttle = rcMid + (rcMid - throttle);
+  // }
+
   const speed = channels[speedCh - 1] || 1000;
   const directionVal = channels[directionCh - 1] || 1000;
   const reversePressed = form?.directionPressedIsReverse ?? false;
   const isReverse = form?.controlMode === 'DIRECTION_SELECTED'
     ? (reversePressed ? directionVal > 1500 : directionVal < 1500)
     : false;
+  const speedColorClass = isReverse ? "bg-red-500" : "bg-blue-500";
+  const directionLabel = isReverse ? "TYŁ" : "PRZÓD";
   const isLoaded = !!form;
 
   const CenterBar = ({ label, value, leftLabel, rightLabel, colorClass }: {
@@ -137,13 +152,13 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
     );
   };
 
-  const FullRangeBar = ({ label, value, topLabel, bottomLabel, colorClass }: {
-    label: string; value: number; topLabel: string; bottomLabel: string; colorClass: string;
+  const FullRangeBar = ({ label, value, topLabel, bottomLabel, colorClass, topLabelColorClass }: {
+    label: string; value: number; topLabel: string; bottomLabel: string; colorClass: string; topLabelColorClass?: string;
   }) => {
     const pct = Math.max(0, Math.min(100, ((value - 1000) / 1000) * 100));
     return (
       <div className="flex flex-col items-center h-full space-y-2 py-2 w-14 border-r border-border/20 pr-4">
-        <span className="text-[9px] text-muted-foreground uppercase text-center font-bold">{topLabel}</span>
+        <span className={`text-[9px] uppercase text-center font-bold ${topLabelColorClass || 'text-muted-foreground'}`}>{topLabel}</span>
         <div className="relative flex-1 w-full bg-[hsl(0,0%,8%)] rounded-lg overflow-hidden border border-border/30">
           <div
             className={`absolute bottom-0 left-1 right-1 ${colorClass} rounded-sm transition-all duration-75 ease-out`}
@@ -216,14 +231,22 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
           </div>
 
           <div className="flex flex-1 overflow-hidden p-5 gap-6">
+            {!data && (
+              <div className="absolute left-5 right-5 top-14 z-20">
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  No receiver data detected — not connected or wrong port. Check UART mapping on the Ports page.
+                </div>
+              </div>
+            )}
             {/* Vertical Throttle / Speed */}
             {form?.controlMode === 'DIRECTION_SELECTED' ? (
               <FullRangeBar
                 label="Speed"
                 value={speed}
-                topLabel="Max"
+                topLabel={directionLabel}
                 bottomLabel="Min"
-                colorClass={isReverse ? "bg-destructive" : "bg-cyan-500"}
+                colorClass={speedColorClass}
+                topLabelColorClass={isReverse ? "text-red-500" : "text-blue-500"}
               />
             ) : (
               <VerticalBar 
