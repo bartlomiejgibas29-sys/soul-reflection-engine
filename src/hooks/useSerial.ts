@@ -163,28 +163,7 @@ export function useSerial() {
         const spd = parseFloat(parts[6]) || 0;
         const hdg = parseFloat(parts[7]) || 0;
         const dop = parseFloat(parts[8]) || 0;
-        const base = Math.max(0, Math.min(100, Math.round(100 / Math.max(1, dop))));
-        const sats =
-          numSat > 0
-            ? Array.from({ length: numSat }).map((_, i) => {
-                // Realistic PRN numbers: GPS (1-32), GLONASS (65-88), Galileo (101-136)
-                const satId = i < 8 ? (i + 1) : (i < 12 ? (i + 57) : (i + 89));
-                const gnssId = satId <= 32 ? "GPS" : (satId <= 88 ? "GLO" : "GAL");
-                
-                // Signal strength (C/N0) usually 20-50 dB-Hz
-                const signalStrength = Math.max(15, Math.min(48, Math.round(45 - (i * 2.5) - (dop * 2) + Math.random() * 5)));
-                const isUsed = fix && i < (numSat - 2); // Assume some are not used in fix
-                
-                return {
-                  gnssId,
-                  satId,
-                  signalStrength,
-                  status: (isUsed ? "used" : "unused") as "used" | "unused",
-                  quality: (isUsed ? "fully locked" : "searching") as GpsSatellite["quality"],
-                };
-              })
-            : [];
-        setGpsData({
+        setGpsData(prev => ({
           fix,
           numSatellites: numSat,
           latitude: lat,
@@ -195,8 +174,40 @@ export function useSerial() {
           dop,
           headingImu: 0,
           distToHome: 0,
-          satellites: sats,
-        });
+          satellites: prev?.satellites ?? [],
+        }));
+      }
+      return;
+    }
+
+    // Parse SAT_INFO,count - start collecting satellite data
+    if (line.startsWith("SAT_INFO,")) {
+      const count = parseInt(line.split(",")[1]) || 0;
+      setPendingSatCount(count);
+      pendingSatsRef.current = [];
+      return;
+    }
+
+    // Parse SAT,gnssId,svId,cno,used(0/1),quality
+    if (line.startsWith("SAT,")) {
+      const parts = line.split(",");
+      if (parts.length >= 6) {
+        const sat: GpsSatellite = {
+          gnssId: parts[1],
+          satId: parseInt(parts[2]) || 0,
+          signalStrength: parseInt(parts[3]) || 0,
+          status: parts[4] === "1" ? "used" as const : "unused" as const,
+          quality: parts[5].trim() as GpsSatellite["quality"],
+        };
+        pendingSatsRef.current.push(sat);
+        
+        // When we've received all satellites, update gpsData
+        if (pendingSatsRef.current.length >= pendingSatCount) {
+          const sats = [...pendingSatsRef.current];
+          setGpsData(prev => prev ? { ...prev, satellites: sats } : null);
+          pendingSatsRef.current = [];
+          setPendingSatCount(0);
+        }
       }
       return;
     }
