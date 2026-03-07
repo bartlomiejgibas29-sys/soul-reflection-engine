@@ -134,70 +134,38 @@ const GpsPage = ({ data, settings, onSend }: GpsPageProps) => {
         </div>
       </div>
 
-      {/* GPS Signal Strength Table */}
+      {/* Satellite Signal Strength */}
       <div className="bg-card border border-border rounded-lg overflow-hidden flex flex-col">
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
           <Signal size={14} className="text-primary" />
-          <span className="text-xs font-semibold text-foreground">GPS Signal Strength</span>
+          <span className="text-xs font-semibold text-foreground">Satellite Signal</span>
           <span className="text-[10px] text-muted-foreground ml-auto">{data?.satellites?.length ?? 0} tracked</span>
         </div>
-        <div className="p-0 overflow-auto max-h-[350px]">
+        <div className="flex-1 overflow-auto p-3">
           {(data?.satellites?.length ?? 0) === 0 ? (
-            <div className="flex items-center justify-center text-xs text-muted-foreground p-8 border border-dashed border-border/20 m-4 rounded-md">
+            <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
               No satellites tracked
             </div>
           ) : (
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Gnss ID</th>
-                  <th className="text-center px-3 py-2 font-semibold text-muted-foreground">Sat ID</th>
-                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Signal Strength</th>
-                  <th className="text-center px-3 py-2 font-semibold text-muted-foreground">Status</th>
-                  <th className="text-center px-3 py-2 font-semibold text-muted-foreground">Quality</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data?.satellites?.map((sat, i) => {
-                  const barPct = Math.min(100, (sat.signalStrength / 50) * 100);
-                  const isGood = sat.signalStrength >= 35;
-                  const isMedium = sat.signalStrength >= 25;
-                  const barColor = sat.status === 'unused' && sat.quality === 'unusable'
-                    ? 'bg-muted-foreground/40'
-                    : isGood
-                      ? 'bg-[hsl(var(--sensor-ok))]'
-                      : isMedium
-                        ? 'bg-[hsl(var(--sensor-ok))]/70'
-                        : 'bg-muted-foreground/40';
-
-                  const statusBg = sat.status === 'used'
+            <div className="space-y-1">
+              {data?.satellites?.map((sat, i) => (
+                <div key={i} className="flex items-center gap-2 py-1">
+                  <span className="text-[10px] font-mono text-muted-foreground w-14">{sat.gnssId} {sat.satId}</span>
+                  <div className="flex-1 h-2 bg-[hsl(0,0%,8%)] rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        sat.signalStrength > 50 ? 'bg-[hsl(var(--sensor-ok))]' : sat.signalStrength > 30 ? 'bg-primary' : 'bg-destructive'
+                      }`}
+                      style={{ width: `${Math.min(100, sat.signalStrength)}%` }}
+                    />
                     ? 'bg-[hsl(var(--sensor-ok))] text-[hsl(var(--sensor-ok-foreground,0,0%,0%))]'
-                    : 'bg-destructive text-destructive-foreground';
-
-                  const qualityBg = sat.quality === 'fully_locked' || sat.quality === 'fully locked'
-                    ? 'bg-[hsl(var(--sensor-ok))] text-[hsl(var(--sensor-ok-foreground,0,0%,0%))]'
-                    : sat.quality === 'searching'
-                      ? 'bg-[hsl(45,100%,50%)] text-[hsl(0,0%,0%)]'
+                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                    sat.status === 'used' ? 'bg-[hsl(var(--sensor-ok))]/15 text-[hsl(var(--sensor-ok))]' : 'bg-destructive/15 text-destructive'
+                  }`}>{sat.status}</span>
+                </div>
+              ))}
                       : sat.quality === 'unusable' || sat.quality === 'no_signal'
                         ? 'bg-destructive text-destructive-foreground'
-                        : 'bg-muted text-muted-foreground';
-
-                  return (
-                    <tr key={i} className="border-b border-border/10 hover:bg-muted/10 transition-colors">
-                      <td className="px-3 py-1.5 font-mono text-foreground">{sat.gnssId}</td>
-                      <td className="px-3 py-1.5 text-center font-mono text-foreground">{sat.satId}</td>
-                      <td className="px-3 py-1.5">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-3 bg-muted/30 rounded-sm overflow-hidden">
-                            <div className={`h-full rounded-sm ${barColor}`} style={{ width: `${barPct}%` }} />
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-1.5 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase ${statusBg}`}>
-                          {sat.status}
-                        </span>
-                      </td>
                       <td className="px-3 py-1.5 text-center">
                         <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${qualityBg}`}>
                           {sat.quality}
