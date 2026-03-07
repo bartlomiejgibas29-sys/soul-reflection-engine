@@ -187,7 +187,7 @@ const GpsPage = ({ data, settings, onSend }: GpsPageProps) => {
             </div>
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 rounded-full bg-primary" />
-              <span>Weak (>25dB)</span>
+              <span>Weak (&gt;25dB)</span>
             </div>
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 rounded-full bg-destructive" />
