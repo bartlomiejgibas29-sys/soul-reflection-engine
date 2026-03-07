@@ -62,5 +62,18 @@ extern String gps_ground_assist;
 extern float gps_mag_declination;
 extern bool gpsMode;
 extern unsigned long lastGpsUpdate;
+extern unsigned long lastSatUpdate;
+
+// UBX-NAV-SAT satellite info
+#define MAX_SAT_COUNT 32
+struct SatInfo {
+    uint8_t gnssId;   // 0=GPS, 1=SBAS, 2=Galileo, 3=BeiDou, 5=IMES, 6=GLONASS
+    uint8_t svId;     // Satellite ID
+    uint8_t cno;      // Signal strength (C/N0 dB-Hz)
+    bool used;        // Used in navigation fix
+    uint8_t quality;  // 0=no signal, 1=searching, 2=acquired, 3=unusable, 4=code locked, 5-7=fully locked
+};
+extern SatInfo satInfos[MAX_SAT_COUNT];
+extern uint8_t satCount;
 
 #endif
