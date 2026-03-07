@@ -41,6 +41,11 @@ String gps_ground_assist = "European";
 float gps_mag_declination = 0.0;
 bool gpsMode = false;
 unsigned long lastGpsUpdate = 0;
+unsigned long lastSatUpdate = 0;
+
+// UBX-NAV-SAT data
+SatInfo satInfos[MAX_SAT_COUNT];
+uint8_t satCount = 0;
 
 // Obiekty
 SoftwareSerial Serial2;

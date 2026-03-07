@@ -174,11 +174,11 @@ const GpsPage = ({ data, settings, onSend }: GpsPageProps) => {
                     ? 'bg-[hsl(var(--sensor-ok))] text-[hsl(var(--sensor-ok-foreground,0,0%,0%))]'
                     : 'bg-destructive text-destructive-foreground';
 
-                  const qualityBg = sat.quality === 'fully locked'
+                  const qualityBg = sat.quality === 'fully_locked' || sat.quality === 'fully locked'
                     ? 'bg-[hsl(var(--sensor-ok))] text-[hsl(var(--sensor-ok-foreground,0,0%,0%))]'
                     : sat.quality === 'searching'
                       ? 'bg-[hsl(45,100%,50%)] text-[hsl(0,0%,0%)]'
-                      : sat.quality === 'unusable'
+                      : sat.quality === 'unusable' || sat.quality === 'no_signal'
                         ? 'bg-destructive text-destructive-foreground'
                         : 'bg-muted text-muted-foreground';
 
