@@ -48,7 +48,7 @@ export interface GpsSatellite {
   satId: number;
   signalStrength: number; // 0-100? or dB
   status: "used" | "unused";
-  quality: "fully locked" | "searching" | "unusable" | "code locked";
+  quality: "fully_locked" | "searching" | "unusable" | "code_locked" | "no_signal" | "acquired" | "fully locked";
 }
 
 export interface ReceiverSettings {
