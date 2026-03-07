@@ -183,11 +183,11 @@ const GpsPage = ({ data, settings, onSend }: GpsPageProps) => {
           <div className="mt-2 flex items-center justify-center gap-4 text-[9px] text-muted-foreground uppercase tracking-tighter font-medium border-t border-border/10 pt-2">
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 rounded-full bg-[hsl(var(--sensor-ok))]" />
-              <span>Locked (>35dB)</span>
+              <span>Locked (&gt;35dB)</span>
             </div>
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 rounded-full bg-primary" />
-              <span>Weak (>25dB)</span>
+              <span>Weak (&gt;25dB)</span>
             </div>
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 rounded-full bg-destructive" />
