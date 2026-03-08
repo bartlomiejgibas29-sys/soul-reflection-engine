@@ -218,6 +218,8 @@ static void persistPin(int pin) {
     prefs.end();
 }
 
+static void removeServoByPin(int pin);
+
 static void setPinModeCommand(int pin, const String& modeStr, int valueOpt, bool hasValue) {
     if (!isValidUserPin(pin)) {
         Serial.printf("PIN_CONF,%d,DISABLED,0\n", pin);
@@ -226,12 +228,16 @@ static void setPinModeCommand(int pin, const String& modeStr, int valueOpt, bool
     if ((pin == u1_rx || pin == u1_tx) && u1_enabled) { Serial.printf("PIN_CONF,%d,%s,%d\n", pin, "DISABLED", 0); return; }
     if ((pin == u2_rx || pin == u2_tx) && u2_enabled) { Serial.printf("PIN_CONF,%d,%s,%d\n", pin, "DISABLED", 0); return; }
     if ((pin == u3_rx || pin == u3_tx) && u3_enabled) { Serial.printf("PIN_CONF,%d,%s,%d\n", pin, "DISABLED", 0); return; }
+
+    uint8_t prevMode = pinModeArr[pin];
     uint8_t m = 0;
     if (modeStr == "DISABLED") m = 0;
     else if (modeStr == "LIGHT") m = 1;
     else if (modeStr == "SERVO") m = 2;
     else if (modeStr == "STEERING") m = 3;
+
     int v = hasValue ? valueOpt : 0;
+
     if (m == 3) {
         for (int i = 0; i < 22; i++) {
             if (pinModeArr[i] == 3 && i != pin) {
@@ -243,10 +249,16 @@ static void setPinModeCommand(int pin, const String& modeStr, int valueOpt, bool
             }
         }
     }
+
     pinModeArr[pin] = m;
     pinValArr[pin] = v;
     applyPinRuntime(pin, m, v);
     persistPin(pin);
+
+    if (prevMode == 2 && m != 2) {
+        removeServoByPin(pin);
+    }
+
     const char* ms = "DISABLED";
     if (m == 1) ms = "LIGHT";
     else if (m == 2) ms = "SERVO";
@@ -271,6 +283,41 @@ static void persistServo(int idx) {
     prefs.putInt((base + "spd").c_str(), c.speed);
     prefs.putInt("srv_count", servoCount);
     prefs.end();
+}
+
+static void persistAllServos() {
+    prefs.begin("sys_config", false);
+    prefs.putInt("srv_count", servoCount);
+    prefs.end();
+    for (int i = 0; i < servoCount; i++) {
+        persistServo(i);
+    }
+}
+
+static void removeServoByPin(int pin) {
+    int idx = findServoIdx(pin);
+    if (idx == -1) return;
+
+    for (int i = idx; i < servoCount - 1; i++) {
+        servoConfigs[i] = servoConfigs[i + 1];
+    }
+    if (servoCount > 0) {
+        servoCount--;
+    }
+
+    persistAllServos();
+    Serial.printf(">> INFO: Removed servo config from pin %d\n", pin);
+}
+
+static void compactInvalidServoConfigs() {
+    for (int i = servoCount - 1; i >= 0; i--) {
+        int p = servoConfigs[i].pin;
+        bool invalidPin = (p < 0 || p >= 22);
+        bool notServoMode = (!invalidPin && pinModeArr[p] != 2);
+        if (invalidPin || notServoMode) {
+            removeServoByPin(p);
+        }
+    }
 }
 
 static void setPinModeCommand(String cmd) {
@@ -317,6 +364,13 @@ void setServoConfigCommand(String cmd) {
     }
 
     int pin = parts[1].toInt();
+    if (!isValidUserPin(pin)) {
+        Serial.println("!! ERR: Invalid servo pin");
+        return;
+    }
+
+    compactInvalidServoConfigs();
+
     int idx = findServoIdx(pin);
     if (idx == -1) {
         if (servoCount >= MAX_SERVOS) {
@@ -336,11 +390,30 @@ void setServoConfigCommand(String cmd) {
     c.reverse = parts[7].toInt() == 1;
     c.rate = parts[8].toFloat();
     c.speed = parts[9].toInt();
+
+    if (c.frequency < 10) c.frequency = 50;
+    if (c.minUs < 500) c.minUs = 500;
+    if (c.maxUs > 2500) c.maxUs = 2500;
+    if (c.midUs < c.minUs) c.midUs = c.minUs;
+    if (c.midUs > c.maxUs) c.midUs = c.maxUs;
+    if (c.sourceChannel < 0) c.sourceChannel = 0;
+    if (c.sourceChannel > 16) c.sourceChannel = 16;
+    if (c.rate <= 0.0f) c.rate = 1.0f;
+    if (c.speed < 0) c.speed = 0;
+
     c.currentUs = (float)c.midUs;
     c.lastWrittenUs = 0; // Force rewrite
 
+    // Ensure pin works as SERVO at runtime
+    pinModeArr[pin] = 2;
+    pinValArr[pin] = 0;
+    persistPin(pin);
+
     persistServo(idx);
     applyPinRuntime(pin, 2, 0);
+    Serial.printf("SERVO_CFG,%d,%d,%d,%d,%d,%d,%d,%.2f,%d\n",
+        c.pin, c.frequency, c.minUs, c.midUs, c.maxUs,
+        c.sourceChannel, c.reverse ? 1 : 0, c.rate, c.speed);
     Serial.printf(">> OK: Servo config saved for pin %d\n", pin);
 }
 
@@ -614,14 +687,26 @@ void processCommand(String cmd) {
     }
     else if (cmd.startsWith("SERVO_MOVE:")) {
         // Format: SERVO_MOVE:pin:us (microseconds directly)
-        int c1 = cmd.indexOf(':', 11);
-        int pin = cmd.substring(11, c1).toInt();
-        int us = cmd.substring(c1 + 1).toInt();
-        
+        int firstColon = cmd.indexOf(':');
+        int secondColon = cmd.indexOf(':', firstColon + 1);
+        if (firstColon == -1 || secondColon == -1) {
+            Serial.println("!! ERR: Invalid SERVO_MOVE format");
+            return;
+        }
+
+        int pin = cmd.substring(firstColon + 1, secondColon).toInt();
+        int us = cmd.substring(secondColon + 1).toInt();
+
+        if (!isValidUserPin(pin)) {
+            Serial.println("!! ERR: Invalid servo pin");
+            return;
+        }
+
+        compactInvalidServoConfigs();
+
         // Find or create servo config for this pin
         int idx = findServoIdx(pin);
         if (idx == -1) {
-            // Auto-create config for this servo pin
             if (servoCount >= MAX_SERVOS) {
                 Serial.println("!! ERR: Max servos reached");
                 return;
@@ -638,7 +723,7 @@ void processCommand(String cmd) {
             servoConfigs[idx].speed = 0;
             servoConfigs[idx].lastWrittenUs = 0;
         }
-        
+
         // Ensure pin is in SERVO mode and attached
         if (pin >= 0 && pin < 22 && pinModeArr[pin] != 2) {
             pinModeArr[pin] = 2;
@@ -661,7 +746,11 @@ void processCommand(String cmd) {
         uint32_t duty = (uint32_t)(((uint32_t)us * 65535ULL) / periodUs);
         ledcWrite(pin, duty);
         sc.lastWrittenUs = us;
-        
-        Serial.printf(">> SERVO_POS:%d:%d\n", pin, us);
+
+        persistServo(idx);
+        Serial.printf("SERVO_CFG,%d,%d,%d,%d,%d,%d,%d,%.2f,%d\n",
+            sc.pin, sc.frequency, sc.minUs, sc.midUs, sc.maxUs,
+            sc.sourceChannel, sc.reverse ? 1 : 0, sc.rate, sc.speed);
+        Serial.printf("SERVO_POS,%d,%d\n", pin, us);
     }
 }

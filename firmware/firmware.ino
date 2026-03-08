@@ -116,6 +116,8 @@ void loadSettings() {
 
     // Load Servo Configs
     servoCount = prefs.getInt("srv_count", 0);
+    if (servoCount < 0) servoCount = 0;
+    if (servoCount > MAX_SERVOS) servoCount = MAX_SERVOS;
     for (int i = 0; i < servoCount; i++) {
         String base = "srv_" + String(i) + "_";
         servoConfigs[i].pin = prefs.getInt((base + "pin").c_str(), -1);

@@ -9,6 +9,7 @@ import type { UartConfig, PinConfig } from "@/hooks/useSerial";
 
 // Definicja pinów dla ESP32-C3
 const AVAILABLE_PINS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 21];
+const RESERVED_USB_PINS = [20, 21];
 
 interface PinsPageProps {
   uartConfigs: UartConfig[];
@@ -63,6 +64,13 @@ const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
   };
 
   const getPinStatus = (pin: number) => {
+    if (RESERVED_USB_PINS.includes(pin)) {
+      return {
+        locked: true,
+        reason: "Reserved for USB/programming (GPIO 20/21)"
+      };
+    }
+
     // Sprawdź czy pin jest używany przez UART
     const uartUsage = uartConfigs.find(u => u.enabled && (u.rx === pin || u.tx === pin));
     if (uartUsage) {
@@ -135,7 +143,7 @@ const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
                 </div>
 
                 {status.locked ? (
-                  <div className="text-xs text-muted-foreground bg-amber-500/10 p-2 rounded border border-amber-500/20">
+                  <div className="text-xs text-muted-foreground bg-muted p-2 rounded border border-border">
                     {status.reason}
                   </div>
                 ) : (
