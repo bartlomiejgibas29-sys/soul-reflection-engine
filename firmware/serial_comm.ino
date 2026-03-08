@@ -655,6 +655,12 @@ void processCommand(String cmd) {
         // Manual move always takes control (prevents RC override)
         sc.sourceChannel = 0;
         sc.currentUs = (float)us;
+
+        // Write immediately
+        uint32_t periodUs = 1000000UL / sc.frequency;
+        uint32_t duty = (uint32_t)(((uint32_t)us * 65535ULL) / periodUs);
+        ledcWrite(pin, duty);
+        sc.lastWrittenUs = us;
         
         Serial.printf(">> SERVO_POS:%d:%d\n", pin, us);
     }
