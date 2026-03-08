@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { SlidersHorizontal, RefreshCw, Save, Activity, Plus, Trash2 } from "lucide-react";
+import { SlidersHorizontal, RefreshCw, Save, Activity, Plus, Trash2, Play } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
 import type { PinConfig, ServoConfig, ServoPoint } from "@/hooks/useSerial";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -124,6 +125,13 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
     });
   };
 
+  const [manualAngles, setManualAngles] = useState<Record<number, number>>({});
+
+  const handleManualMove = async (pin: number, angle: number) => {
+    setManualAngles(prev => ({ ...prev, [pin]: angle }));
+    await onSend(`SERVO_MOVE:${pin}:${angle}`);
+  };
+
   const handleSave = async (pin: number) => {
     const c = localConfigs[pin];
     if (!c) return;
@@ -186,8 +194,35 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Hardware Settings */}
+              {/* Manual Position Control (when no source channel) */}
+              {config.sourceChannel === 0 && (
+                <div className="mb-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-muted-foreground">Manual Position</Label>
+                    <span className="text-xs font-mono text-muted-foreground">{manualAngles[pin] ?? 90}°</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Slider
+                      min={0}
+                      max={180}
+                      step={1}
+                      value={[manualAngles[pin] ?? 90]}
+                      onValueChange={([v]) => handleManualMove(pin, v)}
+                      className="flex-1"
+                    />
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-8"
+                      onClick={() => handleManualMove(pin, 90)}
+                    >
+                      Center
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-3">
                   <h4 className="text-sm font-medium text-muted-foreground border-b border-border pb-1">Hardware Limits</h4>
                   
@@ -291,9 +326,9 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
                           />
                           <div className="flex justify-center">
                             <Switch 
-                              size="sm"
                               checked={pt.proportional} 
                               onCheckedChange={checked => handlePointChange(pin, idx, "proportional", checked)}
+                              className="scale-75"
                             />
                           </div>
                           <Button 
