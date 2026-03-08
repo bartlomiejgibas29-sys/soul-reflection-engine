@@ -223,12 +223,11 @@ const GpsPage = ({ data, settings, onSend }: GpsPageProps) => {
         <div className="flex-1 h-full">
           {data?.fix ? (
             <MapContainer
-              center={[data.latitude, data.longitude]}
-              zoom={18}
+              {...{ center: [data.latitude, data.longitude], zoom: 18 } as any}
               className="w-full h-full"
             >
               <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" />
-              <CircleMarker center={[data.latitude, data.longitude]} radius={10} pathOptions={{ color: "#f59e0b" }} />
+              <CircleMarker {...{ center: [data.latitude, data.longitude], radius: 10, pathOptions: { color: "#f59e0b" } } as any} />
             </MapContainer>
           ) : (
             <div className="flex items-center justify-center w-full h-full bg-[hsl(0,0%,8%)]">
