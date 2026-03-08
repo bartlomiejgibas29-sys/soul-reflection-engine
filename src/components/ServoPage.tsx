@@ -98,7 +98,7 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
       positions[pin] = pinConf?.value ?? 1500;
     });
     setLivePositions(positions);
-  }, [servoConfigs, pinConfigs, servoPins]);
+  }, [servoConfigs, pinConfigs]);
 
   const handleFieldChange = (pin: number, field: keyof LocalServoConfig, value: string | number | boolean | boolean[]) => {
     setConfigs(prev => ({
