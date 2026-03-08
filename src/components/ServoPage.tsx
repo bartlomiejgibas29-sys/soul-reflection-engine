@@ -6,7 +6,6 @@ import { SlidersHorizontal, RefreshCw, Save } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import type { PinConfig, ServoConfig } from "@/hooks/useSerial";
-import type { PinConfig, ServoConfig } from "@/hooks/useSerial";
 
 interface ServoPageProps {
   pinConfigs: PinConfig[];
