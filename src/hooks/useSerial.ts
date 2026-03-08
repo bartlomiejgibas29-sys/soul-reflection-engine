@@ -197,6 +197,24 @@ export function useSerial() {
       return;
     }
 
+    // Parse SERVO_POS,pin,us
+    if (line.startsWith("SERVO_POS,")) {
+      const parts = line.split(",");
+      if (parts.length >= 3) {
+        const pin = parseInt(parts[1]);
+        const us = parseInt(parts[2]);
+        if (!Number.isNaN(pin) && !Number.isNaN(us)) {
+          setPinConfigs(prev => {
+            const existing = prev.find(p => p.pin === pin);
+            const mode = existing?.mode ?? "SERVO";
+            const filtered = prev.filter(p => p.pin !== pin);
+            return [...filtered, { pin, mode, value: us }].sort((a, b) => a.pin - b.pin);
+          });
+        }
+      }
+      return;
+    }
+
     // Parse Device info: DEVICE,type,version
     if (line.startsWith("DEVICE,")) {
       const parts = line.split(",");
