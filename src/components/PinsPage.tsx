@@ -96,25 +96,17 @@ const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
   };
 
   return (
-    <div className="h-full overflow-y-auto p-4 space-y-4">
+    <div className="h-full overflow-y-auto p-4 space-y-4 relative">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Cpu className="text-primary" />
           <h2 className="text-lg font-semibold">Pin Configuration</h2>
         </div>
-        <div className="flex items-center gap-2">
-          {Object.keys(pendingChanges).length > 0 && (
-            <Button size="sm" onClick={handleSaveAll}>
-              <Save className="mr-2 h-4 w-4" />
-              Save All ({Object.keys(pendingChanges).length})
-            </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={() => onSend("PIN_TABLE")}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" onClick={() => onSend("PIN_TABLE")}>
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Refresh
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -188,6 +180,16 @@ const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
           );
         })}
       </div>
+
+      {Object.keys(pendingChanges).length > 0 && (
+        <Button
+          onClick={handleSaveAll}
+          className="fixed bottom-6 right-6 z-50 bg-foreground text-background hover:bg-foreground/90 rounded-md px-5 py-2.5 shadow-lg flex items-center gap-2 font-semibold tracking-wider text-sm"
+        >
+          <Save className="h-4 w-4" />
+          SAVE
+        </Button>
+      )}
     </div>
   );
 };
