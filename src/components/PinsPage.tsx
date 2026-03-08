@@ -63,6 +63,19 @@ const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
     });
   };
 
+  const handleSaveAll = () => {
+    Object.entries(pendingChanges).forEach(([pin, mode]) => {
+      if (mode === "STEERING") {
+        const existingSteering = pinConfigs.find(p => p.mode === "STEERING" && p.pin !== Number(pin));
+        if (existingSteering) {
+          onSend(`SET_PIN_MODE:${existingSteering.pin}:DISABLED`);
+        }
+      }
+      onSend(`SET_PIN_MODE:${pin}:${mode}`);
+    });
+    setPendingChanges({});
+  };
+
   const getPinStatus = (pin: number) => {
     if (RESERVED_USB_PINS.includes(pin)) {
       return {
@@ -90,10 +103,18 @@ const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
           <Cpu className="text-primary" />
           <h2 className="text-lg font-semibold">Pin Configuration</h2>
         </div>
-        <Button variant="outline" size="sm" onClick={() => onSend("PIN_TABLE")}>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          {Object.keys(pendingChanges).length > 0 && (
+            <Button size="sm" onClick={handleSaveAll}>
+              <Save className="mr-2 h-4 w-4" />
+              Save All ({Object.keys(pendingChanges).length})
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => onSend("PIN_TABLE")}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
