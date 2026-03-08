@@ -143,7 +143,7 @@ const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
                 </div>
 
                 {status.locked ? (
-                  <div className="text-xs text-muted-foreground bg-amber-500/10 p-2 rounded border border-amber-500/20">
+                  <div className="text-xs text-muted-foreground bg-muted p-2 rounded border border-border">
                     {status.reason}
                   </div>
                 ) : (
