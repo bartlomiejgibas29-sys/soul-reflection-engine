@@ -642,10 +642,45 @@ void processCommand(String cmd) {
         setPinModeCommand(cmd);
     }
     else if (cmd.startsWith("SET_SERVO_CFG:")) {
-        // Format: SET_SERVO_CFG:pin:freq:min:max:speed:src:inMin:inMax:outMin:outMax
         setServoConfigCommand(cmd);
     }
     else if (cmd == "SERVO_TABLE") {
         reportServoConfigs();
+    }
+    else if (cmd.startsWith("SERVO_MOVE:")) {
+        // Format: SERVO_MOVE:pin:angle
+        int c1 = cmd.indexOf(':', 11);
+        int pin = cmd.substring(11, c1).toInt();
+        int angle = cmd.substring(c1 + 1).toInt();
+        if (angle < 0) angle = 0;
+        if (angle > 180) angle = 180;
+        
+        // Find or create servo config for this pin
+        int idx = findServoIdx(pin);
+        if (idx == -1) {
+            if (servoCount >= MAX_SERVOS) {
+                Serial.println("!! ERR: Max servos reached");
+                return;
+            }
+            idx = servoCount++;
+            servoConfigs[idx].pin = pin;
+            servoConfigs[idx].frequency = 50;
+            servoConfigs[idx].minPulse = 500;
+            servoConfigs[idx].maxPulse = 2500;
+            servoConfigs[idx].speed = 0;
+            servoConfigs[idx].sourceChannel = 0;
+            servoConfigs[idx].numPoints = 0;
+        }
+        
+        // Directly set position
+        servoConfigs[idx].currentPos = (float)angle;
+        
+        // Write pulse immediately
+        float us = servoConfigs[idx].minPulse + ((float)angle / 180.0f) * (servoConfigs[idx].maxPulse - servoConfigs[idx].minPulse);
+        uint32_t periodUs = 1000000 / servoConfigs[idx].frequency;
+        uint32_t duty = (uint32_t)((us * 65535ULL) / periodUs);
+        ledcWrite(pin, duty);
+        
+        Serial.printf(">> SERVO_POS:%d:%d\n", pin, angle);
     }
 }
