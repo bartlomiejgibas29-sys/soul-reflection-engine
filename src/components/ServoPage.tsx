@@ -225,29 +225,27 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
                 </table>
               </div>
 
-              {/* Manual control slider — shown when enabled */}
-              {manualEnabled && (
-                <div className="flex items-center gap-3 px-3 py-2 bg-muted/10 border-t border-border">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider w-14 shrink-0">Ręczne</span>
-                  <Slider min={cfg.min} max={cfg.max} step={1}
-                    value={[us]}
-                    onValueChange={([v]) => handleManualMove(pin, v)}
-                    className="flex-1" />
-                  <span className="text-xs font-mono text-muted-foreground w-14 text-right">{us} µs</span>
-                  <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
-                    onClick={() => handleManualMove(pin, cfg.mid)}>
-                    Center
-                  </Button>
-                  <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
-                    onClick={() => handleManualMove(pin, cfg.min)}>
-                    MIN
-                  </Button>
-                  <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
-                    onClick={() => handleManualMove(pin, cfg.max)}>
-                    MAX
-                  </Button>
-                </div>
-              )}
+              {/* Manual control slider — always visible */}
+              <div className="flex items-center gap-3 px-3 py-2 bg-muted/10 border-t border-border">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider w-14 shrink-0">Ręczne</span>
+                <Slider min={cfg.min} max={cfg.max} step={1}
+                  value={[us]}
+                  onValueChange={([v]) => handleManualMove(pin, v)}
+                  className="flex-1" />
+                <span className="text-xs font-mono text-muted-foreground w-14 text-right">{us} µs</span>
+                <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
+                  onClick={() => handleManualMove(pin, cfg.min)}>
+                  MIN
+                </Button>
+                <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
+                  onClick={() => handleManualMove(pin, cfg.mid)}>
+                  MID
+                </Button>
+                <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
+                  onClick={() => handleManualMove(pin, cfg.max)}>
+                  MAX
+                </Button>
+              </div>
             </div>
           );
         })}
