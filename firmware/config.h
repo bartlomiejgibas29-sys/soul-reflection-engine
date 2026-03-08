@@ -61,6 +61,8 @@ extern float gps_mag_declination;
 extern bool gpsMode;
 extern unsigned long lastGpsUpdate;
 extern unsigned long lastSatUpdate;
+extern bool receiverMode;
+extern unsigned long lastCrsfUpdate;
 
 // UBX-NAV-SAT satellite info
 #define MAX_SAT_COUNT 32

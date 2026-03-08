@@ -618,6 +618,7 @@ void processCommand(String cmd) {
         int pin = cmd.substring(11, c1).toInt();
         int us = cmd.substring(c1 + 1).toInt();
         
+        // Find or create servo config for this pin
         int idx = findServoIdx(pin);
         if (idx == -1) {
             // Auto-create config for this servo pin
@@ -638,13 +639,23 @@ void processCommand(String cmd) {
             servoConfigs[idx].lastWrittenUs = 0;
         }
         
+        // Ensure pin is in SERVO mode and attached
+        if (pin >= 0 && pin < 22 && pinModeArr[pin] != 2) {
+            pinModeArr[pin] = 2;
+            pinValArr[pin] = 0;
+            persistPin(pin);
+            applyPinRuntime(pin, 2, 0);
+        }
+
         // Clamp to min/max
         ServoConfig &sc = servoConfigs[idx];
         if (us < sc.minUs) us = sc.minUs;
         if (us > sc.maxUs) us = sc.maxUs;
-        
+
+        // Manual move always takes control (prevents RC override)
+        sc.sourceChannel = 0;
         sc.currentUs = (float)us;
-        
+
         // Write immediately
         uint32_t periodUs = 1000000UL / sc.frequency;
         uint32_t duty = (uint32_t)(((uint32_t)us * 65535ULL) / periodUs);

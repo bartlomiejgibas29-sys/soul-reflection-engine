@@ -39,25 +39,27 @@ void handleServoLoop() {
         // --- Determine target microseconds ---
         float targetUs = c.currentUs;
 
-        if (c.sourceChannel >= 1 && c.sourceChannel <= 16) {
-            // Read RC channel (CRSF gives ~988-2012)
+        if (receiverMode && c.sourceChannel >= 1 && c.sourceChannel <= 16) {
+            // Read RC channel only when receiver mode is active and data is fresh
             int rcVal = crsf.getChannel(c.sourceChannel);
+            bool freshData = (millis() - lastCrsfUpdate) < 500;
+            bool validRange = rcVal >= 800 && rcVal <= 2200;
 
-            // Map RC value to servo output using min/mid/max + rate
-            // RC center = 1500, deflection = rcVal - 1500
-            // rate multiplies the deflection
-            float deflection = (float)(rcVal - 1500);
+            if (freshData && validRange) {
+                // Map RC value to servo output using min/mid/max + rate
+                float deflection = (float)(rcVal - 1500);
 
-            // Apply rate (deflection multiplier, e.g. 1.0 = 100%)
-            deflection *= c.rate;
+                // Apply rate (deflection multiplier, e.g. 1.0 = 100%)
+                deflection *= c.rate;
 
-            // Apply reverse
-            if (c.reverse) deflection = -deflection;
+                // Apply reverse
+                if (c.reverse) deflection = -deflection;
 
-            // Target = mid + scaled deflection, clamped to min..max
-            targetUs = (float)c.midUs + deflection;
-            if (targetUs < (float)c.minUs) targetUs = (float)c.minUs;
-            if (targetUs > (float)c.maxUs) targetUs = (float)c.maxUs;
+                // Target = mid + scaled deflection, clamped to min..max
+                targetUs = (float)c.midUs + deflection;
+                if (targetUs < (float)c.minUs) targetUs = (float)c.minUs;
+                if (targetUs > (float)c.maxUs) targetUs = (float)c.maxUs;
+            }
         }
 
         // --- Speed limiting (optional smoothing) ---
