@@ -63,6 +63,19 @@ const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
     });
   };
 
+  const handleSaveAll = () => {
+    Object.entries(pendingChanges).forEach(([pin, mode]) => {
+      if (mode === "STEERING") {
+        const existingSteering = pinConfigs.find(p => p.mode === "STEERING" && p.pin !== Number(pin));
+        if (existingSteering) {
+          onSend(`SET_PIN_MODE:${existingSteering.pin}:DISABLED`);
+        }
+      }
+      onSend(`SET_PIN_MODE:${pin}:${mode}`);
+    });
+    setPendingChanges({});
+  };
+
   const getPinStatus = (pin: number) => {
     if (RESERVED_USB_PINS.includes(pin)) {
       return {
