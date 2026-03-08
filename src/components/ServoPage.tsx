@@ -222,7 +222,7 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
                 </div>
               )}
 
-                {/* Hardware Settings */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-3">
                   <h4 className="text-sm font-medium text-muted-foreground border-b border-border pb-1">Hardware Limits</h4>
                   
