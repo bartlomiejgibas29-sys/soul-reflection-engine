@@ -618,6 +618,7 @@ void processCommand(String cmd) {
         int pin = cmd.substring(11, c1).toInt();
         int us = cmd.substring(c1 + 1).toInt();
         
+        // Find or create servo config for this pin
         int idx = findServoIdx(pin);
         if (idx == -1) {
             // Auto-create config for this servo pin
