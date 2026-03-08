@@ -5,8 +5,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SlidersHorizontal, RefreshCw, Save } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import type { PinConfig, ServoConfig } from "@/hooks/useSerial";
 
 interface ServoPageProps {
@@ -42,7 +40,6 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
   const [configs, setConfigs] = useState<Record<number, LocalServoConfig>>({});
   const [livePositions, setLivePositions] = useState<Record<number, number>>({});
   const [manualUs, setManualUs] = useState<Record<number, number>>({});
-  const [manualEnabled, setManualEnabled] = useState(false);
   const throttleRef = useRef<Record<number, NodeJS.Timeout>>({});
 
   useEffect(() => {
@@ -225,40 +222,33 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
                 </table>
               </div>
 
-              {/* Manual control slider — shown when enabled */}
-              {manualEnabled && (
-                <div className="flex items-center gap-3 px-3 py-2 bg-muted/10 border-t border-border">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider w-14 shrink-0">Ręczne</span>
-                  <Slider min={cfg.min} max={cfg.max} step={1}
-                    value={[us]}
-                    onValueChange={([v]) => handleManualMove(pin, v)}
-                    className="flex-1" />
-                  <span className="text-xs font-mono text-muted-foreground w-14 text-right">{us} µs</span>
-                  <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
-                    onClick={() => handleManualMove(pin, cfg.mid)}>
-                    Center
-                  </Button>
-                  <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
-                    onClick={() => handleManualMove(pin, cfg.min)}>
-                    MIN
-                  </Button>
-                  <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
-                    onClick={() => handleManualMove(pin, cfg.max)}>
-                    MAX
-                  </Button>
-                </div>
-              )}
+              {/* Manual control slider — always visible */}
+              <div className="flex items-center gap-3 px-3 py-2 bg-muted/10 border-t border-border">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider w-14 shrink-0">Ręczne</span>
+                <Slider min={cfg.min} max={cfg.max} step={1}
+                  value={[us]}
+                  onValueChange={([v]) => handleManualMove(pin, v)}
+                  className="flex-1" />
+                <span className="text-xs font-mono text-muted-foreground w-14 text-right">{us} µs</span>
+                <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
+                  onClick={() => handleManualMove(pin, cfg.min)}>
+                  MIN
+                </Button>
+                <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
+                  onClick={() => handleManualMove(pin, cfg.mid)}>
+                  MID
+                </Button>
+                <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
+                  onClick={() => handleManualMove(pin, cfg.max)}>
+                  MAX
+                </Button>
+              </div>
             </div>
           );
         })}
       </div>
 
-      {/* Manual control toggle + Save */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Switch checked={manualEnabled} onCheckedChange={setManualEnabled} />
-          <Label className="text-xs text-muted-foreground">Wyłącz tryb podglądu na żywo</Label>
-        </div>
+      <div className="flex justify-end">
         <Button onClick={handleSaveAll} className="px-6">
           <Save className="mr-2 h-4 w-4" />
           Zapisz
