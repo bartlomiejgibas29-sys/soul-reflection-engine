@@ -180,6 +180,16 @@ const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
           );
         })}
       </div>
+
+      {Object.keys(pendingChanges).length > 0 && (
+        <Button
+          onClick={handleSaveAll}
+          className="fixed bottom-6 right-6 z-50 bg-foreground text-background hover:bg-foreground/90 rounded-md px-5 py-2.5 shadow-lg flex items-center gap-2 font-semibold tracking-wider text-sm"
+        >
+          <Save className="h-4 w-4" />
+          SAVE
+        </Button>
+      )}
     </div>
   );
 };
