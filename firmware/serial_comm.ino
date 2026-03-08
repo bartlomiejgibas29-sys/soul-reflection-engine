@@ -152,22 +152,22 @@ static void applyPinRuntime(int pin, uint8_t mode, int value) {
         pinMode(pin, OUTPUT);
         digitalWrite(pin, value ? HIGH : LOW);
     } else if (mode == 2) {
-        // Find custom config or use defaults
+        // Servo mode: attach LEDC and center
         int freq = 50;
-        for (int i = 0; i < servoCount; i++) {
-            if (servoConfigs[i].pin == pin) {
-                freq = servoConfigs[i].frequency;
-                break;
-            }
+        int midUs = 1500;
+        int idx = findServoIdx(pin);
+        if (idx >= 0) {
+            freq = servoConfigs[idx].frequency;
+            midUs = servoConfigs[idx].midUs;
         }
-
-        // New LEDC API (v3.0.0+)
         ledcAttach(pin, freq, 16);
-        
-        int us = 1500; // default middle
-        uint32_t periodUs = 1000000 / freq;
-        uint32_t duty = (uint32_t)((us * 65535ULL) / periodUs);
+        uint32_t periodUs = 1000000UL / freq;
+        uint32_t duty = (uint32_t)(((uint32_t)midUs * 65535ULL) / periodUs);
         ledcWrite(pin, duty);
+        if (idx >= 0) {
+            servoConfigs[idx].currentUs = (float)midUs;
+            servoConfigs[idx].lastWrittenUs = midUs;
+        }
     } else if (mode == 3) {
         pinMode(pin, OUTPUT);
         digitalWrite(pin, LOW);
