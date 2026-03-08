@@ -42,16 +42,14 @@ extern int db_rc, db_yaw, db_thr3d;
 extern bool rc_smooth;
 extern int rc_smooth_coeff;
 // Car Control Settings
-extern int steering_ch; // Numer kanału dla skrętu (1-16)
-extern int throttle_ch; // Numer kanału dla gazu (1-16)
-extern bool steering_rev; // Odwrócenie skrętu
-extern bool throttle_rev; // Odwrócenie gazu
-// Tryb sterowania i kanały dla trybu kierunek+prędkość
-extern String control_mode; // "PROPORTIONAL" | "DIRECTION_SELECTED"
-extern int direction_ch;    // Kanał wyboru kierunku
-extern int speed_ch;        // Kanał prędkości
-extern bool dir_pressed_is_reverse; // true: wciśnięty = wstecz; false: spoczynek = wstecz
-
+extern int steering_ch;
+extern int throttle_ch;
+extern bool steering_rev;
+extern bool throttle_rev;
+extern String control_mode;
+extern int direction_ch;
+extern int speed_ch;
+extern bool dir_pressed_is_reverse;
 
 // GPS Settings
 extern String gps_protocol;
@@ -67,41 +65,34 @@ extern unsigned long lastSatUpdate;
 // UBX-NAV-SAT satellite info
 #define MAX_SAT_COUNT 32
 struct SatInfo {
-    uint8_t gnssId;   // 0=GPS, 1=SBAS, 2=Galileo, 3=BeiDou, 5=IMES, 6=GLONASS
-    uint8_t svId;     // Satellite ID
-    uint8_t cno;      // Signal strength (C/N0 dB-Hz)
-    bool used;        // Used in navigation fix
-    uint8_t quality;  // 0=no signal, 1=searching, 2=acquired, 3=unusable, 4=code locked, 5-7=fully locked
+    uint8_t gnssId;
+    uint8_t svId;
+    uint8_t cno;
+    bool used;
+    uint8_t quality;
 };
 extern SatInfo satInfos[MAX_SAT_COUNT];
 extern uint8_t satCount;
 
-// --- Servo Configuration ---
-struct ServoPoint {
-    int inValue;  // RC value (e.g., 1000)
-    int outAngle; // Servo angle (e.g., 90)
-    bool proportional; // true = interpolate from prev, false = jump
-};
-
+// --- Servo Configuration (Betaflight-style) ---
 struct ServoConfig {
     int pin;
-    int frequency;    // Hz
-    int minPulse;     // us
-    int maxPulse;     // us
-    int speed;        // deg/sec or step (0=instant)
-    int sourceChannel;// 0=None, 1-16=RC Channel
-    int numPoints;
-    ServoPoint points[8]; // Max 8 points per servo
-    float currentPos; // Internal state for smoothing
+    int frequency;      // PWM frequency (Hz), typically 50
+    int minUs;           // Minimum pulse width (us), e.g. 1000
+    int midUs;           // Center pulse width (us), e.g. 1500
+    int maxUs;           // Maximum pulse width (us), e.g. 2000
+    int sourceChannel;   // 0=None(manual), 1-16=RC Channel
+    bool reverse;        // Reverse direction
+    float rate;          // Deflection multiplier (1.0 = 100%)
+    int speed;           // Speed limit (us/sec, 0=instant)
+    float currentUs;     // Current position in microseconds (runtime)
+    int lastWrittenUs;   // Last written value to avoid redundant writes
 };
 #define MAX_SERVOS 6
 extern ServoConfig servoConfigs[MAX_SERVOS];
 extern int servoCount;
 
-// --- Pin configuration (UI: PinsPage)
-// Dostępne tryby: DISABLED | LIGHT | SERVO | STEERING
-// Implementacja i stan runtime są utrzymywane w serial_comm.ino.
-// Te funkcje inicjalizują i raportują stan pinów oraz obsługują komendy.
+// --- Pin configuration ---
 void initPinConfig();
 void reportAllPins();
 int findServoIdx(int pin);

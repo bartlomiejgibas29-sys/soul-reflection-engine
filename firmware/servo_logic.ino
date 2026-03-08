@@ -1,6 +1,16 @@
 #include "config.h"
 
-// Helper to find servo index by pin
+// ============================================================
+// servo_logic.ino — Betaflight-style servo mixer for ESP32-C3
+// ============================================================
+// Each servo maps an RC source channel (1-16) to a PWM output
+// using min/mid/max microsecond values, with rate (deflection
+// multiplier) and optional reverse.
+//
+// When sourceChannel == 0, servo holds its last commanded
+// position (set via SERVO_MOVE serial command).
+// ============================================================
+
 int findServoIdx(int pin) {
     for (int i = 0; i < servoCount; i++) {
         if (servoConfigs[i].pin == pin) return i;
@@ -8,74 +18,71 @@ int findServoIdx(int pin) {
     return -1;
 }
 
-void handleServoLoop() {
-    static unsigned long lastUpdate = 0;
-    unsigned long now = millis();
-    float dt = (now - lastUpdate) / 1000.0f;
-    if (dt <= 0) dt = 0.001f;
-    lastUpdate = now;
+// Convert microseconds to LEDC duty (16-bit resolution)
+static void writeServoUs(int pin, int frequency, float us) {
+    uint32_t periodUs = 1000000UL / frequency;
+    uint32_t duty = (uint32_t)((us * 65535ULL) / periodUs);
+    ledcWrite(pin, duty);
+}
 
-    // External array for current pin modes (declared in serial_comm.ino)
+void handleServoLoop() {
     extern uint8_t pinModeArr[22];
 
     for (int p = 0; p < 22; p++) {
-        if (pinModeArr[p] != 2) continue; // Not a servo
-        
+        if (pinModeArr[p] != 2) continue; // Not a servo pin
+
         int idx = findServoIdx(p);
         if (idx == -1) continue;
-        
+
         ServoConfig &c = servoConfigs[idx];
 
-        float targetAngle = c.currentPos; // Default to current if no source
+        // --- Determine target microseconds ---
+        float targetUs = c.currentUs;
 
         if (c.sourceChannel >= 1 && c.sourceChannel <= 16) {
-            int rcVal = crsf.getChannel(c.sourceChannel); // 988 - 2012
-            
-            if (c.numPoints > 0) {
-                // Find boundaries
-                if (rcVal <= c.points[0].inValue) {
-                    targetAngle = (float)c.points[0].outAngle;
-                } else if (rcVal >= c.points[c.numPoints - 1].inValue) {
-                    targetAngle = (float)c.points[c.numPoints - 1].outAngle;
-                } else {
-                    // Find the segment where rcVal lies
-                    for (int i = 0; i < c.numPoints - 1; i++) {
-                        if (rcVal >= c.points[i].inValue && rcVal <= c.points[i+1].inValue) {
-                            if (c.points[i+1].proportional) {
-                                // Linear interpolation between points[i] and points[i+1]
-                                float t = (float)(rcVal - c.points[i].inValue) / (float)(c.points[i+1].inValue - c.points[i].inValue);
-                                targetAngle = (float)c.points[i].outAngle + t * (float)(c.points[i+1].outAngle - c.points[i].outAngle);
-                            } else {
-                                // Fixed (closest point jump logic or just stay at current segment end)
-                                // Standard RC logic for "fixed": if past 50% of segment, jump to next point
-                                int mid = (c.points[i].inValue + c.points[i+1].inValue) / 2;
-                                targetAngle = (rcVal < mid) ? (float)c.points[i].outAngle : (float)c.points[i+1].outAngle;
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
+            // Read RC channel (CRSF gives ~988-2012)
+            int rcVal = crsf.getChannel(c.sourceChannel);
+
+            // Map RC value to servo output using min/mid/max + rate
+            // RC center = 1500, deflection = rcVal - 1500
+            // rate multiplies the deflection
+            float deflection = (float)(rcVal - 1500);
+
+            // Apply rate (deflection multiplier, e.g. 1.0 = 100%)
+            deflection *= c.rate;
+
+            // Apply reverse
+            if (c.reverse) deflection = -deflection;
+
+            // Target = mid + scaled deflection, clamped to min..max
+            targetUs = (float)c.midUs + deflection;
+            if (targetUs < (float)c.minUs) targetUs = (float)c.minUs;
+            if (targetUs > (float)c.maxUs) targetUs = (float)c.maxUs;
         }
 
-        // 2. Handle Speed (Smoothing)
+        // --- Speed limiting (optional smoothing) ---
         if (c.speed > 0) {
-            float step = c.speed * dt;
-            if (targetAngle > c.currentPos + step) c.currentPos += step;
-            else if (targetAngle < c.currentPos - step) c.currentPos -= step;
-            else c.currentPos = targetAngle;
+            // speed is in us/second
+            static unsigned long lastTime[MAX_SERVOS] = {0};
+            unsigned long now = millis();
+            float dt = (now - lastTime[idx]) / 1000.0f;
+            if (dt <= 0) dt = 0.001f;
+            lastTime[idx] = now;
+
+            float maxStep = c.speed * dt;
+            float diff = targetUs - c.currentUs;
+            if (diff > maxStep) c.currentUs += maxStep;
+            else if (diff < -maxStep) c.currentUs -= maxStep;
+            else c.currentUs = targetUs;
         } else {
-            c.currentPos = targetAngle;
+            c.currentUs = targetUs;
         }
 
-        // 3. Convert Angle to Pulse Width (us)
-        // Assume 0-180 deg range maps to minPulse-maxPulse
-        // If angle is outside 0-180, we still map it linearly
-        float us = c.minPulse + (c.currentPos / 180.0f) * (c.maxPulse - c.minPulse);
-        
-        // 4. Update LEDC Duty
-        uint32_t periodUs = 1000000 / c.frequency;
-        uint32_t duty = (uint32_t)((us * 65535ULL) / periodUs);
-        ledcWrite(p, duty);
+        // --- Write PWM only if position changed ---
+        int roundedUs = (int)(c.currentUs + 0.5f);
+        if (roundedUs != c.lastWrittenUs) {
+            writeServoUs(p, c.frequency, c.currentUs);
+            c.lastWrittenUs = roundedUs;
+        }
     }
 }
