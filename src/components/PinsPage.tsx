@@ -96,7 +96,7 @@ const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
   };
 
   return (
-    <div className="h-full overflow-y-auto p-4 space-y-4">
+    <div className="h-full overflow-y-auto p-4 space-y-4 relative">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
