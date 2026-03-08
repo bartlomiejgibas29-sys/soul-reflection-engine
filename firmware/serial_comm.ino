@@ -613,16 +613,14 @@ void processCommand(String cmd) {
         reportServoConfigs();
     }
     else if (cmd.startsWith("SERVO_MOVE:")) {
-        // Format: SERVO_MOVE:pin:angle
+        // Format: SERVO_MOVE:pin:us (microseconds directly)
         int c1 = cmd.indexOf(':', 11);
         int pin = cmd.substring(11, c1).toInt();
-        int angle = cmd.substring(c1 + 1).toInt();
-        if (angle < 0) angle = 0;
-        if (angle > 180) angle = 180;
+        int us = cmd.substring(c1 + 1).toInt();
         
-        // Find or create servo config for this pin
         int idx = findServoIdx(pin);
         if (idx == -1) {
+            // Auto-create config for this servo pin
             if (servoCount >= MAX_SERVOS) {
                 Serial.println("!! ERR: Max servos reached");
                 return;
@@ -630,22 +628,29 @@ void processCommand(String cmd) {
             idx = servoCount++;
             servoConfigs[idx].pin = pin;
             servoConfigs[idx].frequency = 50;
-            servoConfigs[idx].minPulse = 500;
-            servoConfigs[idx].maxPulse = 2500;
-            servoConfigs[idx].speed = 0;
+            servoConfigs[idx].minUs = 1000;
+            servoConfigs[idx].midUs = 1500;
+            servoConfigs[idx].maxUs = 2000;
             servoConfigs[idx].sourceChannel = 0;
-            servoConfigs[idx].numPoints = 0;
+            servoConfigs[idx].reverse = false;
+            servoConfigs[idx].rate = 1.0f;
+            servoConfigs[idx].speed = 0;
+            servoConfigs[idx].lastWrittenUs = 0;
         }
         
-        // Directly set position
-        servoConfigs[idx].currentPos = (float)angle;
+        // Clamp to min/max
+        ServoConfig &sc = servoConfigs[idx];
+        if (us < sc.minUs) us = sc.minUs;
+        if (us > sc.maxUs) us = sc.maxUs;
         
-        // Write pulse immediately
-        float us = servoConfigs[idx].minPulse + ((float)angle / 180.0f) * (servoConfigs[idx].maxPulse - servoConfigs[idx].minPulse);
-        uint32_t periodUs = 1000000 / servoConfigs[idx].frequency;
-        uint32_t duty = (uint32_t)((us * 65535ULL) / periodUs);
+        sc.currentUs = (float)us;
+        
+        // Write immediately
+        uint32_t periodUs = 1000000UL / sc.frequency;
+        uint32_t duty = (uint32_t)(((uint32_t)us * 65535ULL) / periodUs);
         ledcWrite(pin, duty);
+        sc.lastWrittenUs = us;
         
-        Serial.printf(">> SERVO_POS:%d:%d\n", pin, angle);
+        Serial.printf(">> SERVO_POS:%d:%d\n", pin, us);
     }
 }
