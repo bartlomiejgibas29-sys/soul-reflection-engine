@@ -43,7 +43,6 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
   const [livePositions, setLivePositions] = useState<Record<number, number>>({});
   const [manualUs, setManualUs] = useState<Record<number, number>>({});
   const throttleRef = useRef<Record<number, NodeJS.Timeout>>({});
-  const throttleRef = useRef<Record<number, NodeJS.Timeout>>({});
 
   useEffect(() => {
     onSend("SERVO_TABLE");
