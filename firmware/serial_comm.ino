@@ -226,12 +226,16 @@ static void setPinModeCommand(int pin, const String& modeStr, int valueOpt, bool
     if ((pin == u1_rx || pin == u1_tx) && u1_enabled) { Serial.printf("PIN_CONF,%d,%s,%d\n", pin, "DISABLED", 0); return; }
     if ((pin == u2_rx || pin == u2_tx) && u2_enabled) { Serial.printf("PIN_CONF,%d,%s,%d\n", pin, "DISABLED", 0); return; }
     if ((pin == u3_rx || pin == u3_tx) && u3_enabled) { Serial.printf("PIN_CONF,%d,%s,%d\n", pin, "DISABLED", 0); return; }
+
+    uint8_t prevMode = pinModeArr[pin];
     uint8_t m = 0;
     if (modeStr == "DISABLED") m = 0;
     else if (modeStr == "LIGHT") m = 1;
     else if (modeStr == "SERVO") m = 2;
     else if (modeStr == "STEERING") m = 3;
+
     int v = hasValue ? valueOpt : 0;
+
     if (m == 3) {
         for (int i = 0; i < 22; i++) {
             if (pinModeArr[i] == 3 && i != pin) {
@@ -243,10 +247,16 @@ static void setPinModeCommand(int pin, const String& modeStr, int valueOpt, bool
             }
         }
     }
+
     pinModeArr[pin] = m;
     pinValArr[pin] = v;
     applyPinRuntime(pin, m, v);
     persistPin(pin);
+
+    if (prevMode == 2 && m != 2) {
+        removeServoByPin(pin);
+    }
+
     const char* ms = "DISABLED";
     if (m == 1) ms = "LIGHT";
     else if (m == 2) ms = "SERVO";
