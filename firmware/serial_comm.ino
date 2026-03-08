@@ -273,6 +273,41 @@ static void persistServo(int idx) {
     prefs.end();
 }
 
+static void persistAllServos() {
+    prefs.begin("sys_config", false);
+    prefs.putInt("srv_count", servoCount);
+    prefs.end();
+    for (int i = 0; i < servoCount; i++) {
+        persistServo(i);
+    }
+}
+
+static void removeServoByPin(int pin) {
+    int idx = findServoIdx(pin);
+    if (idx == -1) return;
+
+    for (int i = idx; i < servoCount - 1; i++) {
+        servoConfigs[i] = servoConfigs[i + 1];
+    }
+    if (servoCount > 0) {
+        servoCount--;
+    }
+
+    persistAllServos();
+    Serial.printf(">> INFO: Removed servo config from pin %d\n", pin);
+}
+
+static void compactInvalidServoConfigs() {
+    for (int i = servoCount - 1; i >= 0; i--) {
+        int p = servoConfigs[i].pin;
+        bool invalidPin = (p < 0 || p >= 22);
+        bool notServoMode = (!invalidPin && pinModeArr[p] != 2);
+        if (invalidPin || notServoMode) {
+            removeServoByPin(p);
+        }
+    }
+}
+
 static void setPinModeCommand(String cmd) {
     // Format: SET_PIN_MODE:pin:MODE[:value]
     int c1 = cmd.indexOf(':');
