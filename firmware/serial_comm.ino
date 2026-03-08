@@ -262,59 +262,35 @@ static void persistServo(int idx) {
     ServoConfig &c = servoConfigs[idx];
     prefs.putInt((base + "pin").c_str(), c.pin);
     prefs.putInt((base + "frq").c_str(), c.frequency);
-    prefs.putInt((base + "min").c_str(), c.minPulse);
-    prefs.putInt((base + "max").c_str(), c.maxPulse);
-    prefs.putInt((base + "spd").c_str(), c.speed);
+    prefs.putInt((base + "min").c_str(), c.minUs);
+    prefs.putInt((base + "mid").c_str(), c.midUs);
+    prefs.putInt((base + "max").c_str(), c.maxUs);
     prefs.putInt((base + "src").c_str(), c.sourceChannel);
-    prefs.putInt((base + "npts").c_str(), c.numPoints);
-    for (int i = 0; i < 8; i++) {
-        String pbase = base + "p" + String(i);
-        if (i < c.numPoints) {
-            prefs.putInt((pbase + "i").c_str(), c.points[i].inValue);
-            prefs.putInt((pbase + "o").c_str(), c.points[i].outAngle);
-            prefs.putBool((pbase + "p").c_str(), c.points[i].proportional);
-        }
-    }
+    prefs.putBool((base + "rev").c_str(), c.reverse);
+    prefs.putFloat((base + "rate").c_str(), c.rate);
+    prefs.putInt((base + "spd").c_str(), c.speed);
     prefs.putInt("srv_count", servoCount);
     prefs.end();
 }
 
 static void setPinModeCommand(String cmd) {
     // Format: SET_PIN_MODE:pin:MODE[:value]
-    int parts[4];
-    int count = 0;
-    int lastPos = 0;
-    for (int i = 0; i < 4; i++) {
-        int nextPos = cmd.indexOf(':', lastPos);
-        if (nextPos == -1) {
-            if (lastPos < cmd.length()) count++;
-            break;
-        }
-        count++;
-        lastPos = nextPos + 1;
-    }
-
-    // Manual split
     int c1 = cmd.indexOf(':');
     int c2 = cmd.indexOf(':', c1 + 1);
     int c3 = cmd.indexOf(':', c2 + 1);
-
     int pin = cmd.substring(c1 + 1, c2).toInt();
     String mode = (c3 == -1) ? cmd.substring(c2 + 1) : cmd.substring(c2 + 1, c3);
     int val = (c3 == -1) ? 0 : cmd.substring(c3 + 1).toInt();
     setPinModeCommand(pin, mode, val, (c3 != -1));
 }
 
+// Report servo configs: SERVO_CFG,pin,freq,minUs,midUs,maxUs,src,reverse,rate,speed
 void reportServoConfigs() {
     for (int i = 0; i < servoCount; i++) {
         ServoConfig &c = servoConfigs[i];
-        Serial.printf("SERVO_CFG,%d,%d,%d,%d,%d,%d,%d",
-            c.pin, c.frequency, c.minPulse, c.maxPulse, c.speed,
-            c.sourceChannel, c.numPoints);
-        for (int j = 0; j < c.numPoints; j++) {
-            Serial.printf(",%d,%d,%d", c.points[j].inValue, c.points[j].outAngle, c.points[j].proportional ? 1 : 0);
-        }
-        Serial.println();
+        Serial.printf("SERVO_CFG,%d,%d,%d,%d,%d,%d,%d,%.2f,%d\n",
+            c.pin, c.frequency, c.minUs, c.midUs, c.maxUs,
+            c.sourceChannel, c.reverse ? 1 : 0, c.rate, c.speed);
     }
 }
 
