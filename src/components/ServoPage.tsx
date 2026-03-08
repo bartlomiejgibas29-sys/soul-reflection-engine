@@ -194,7 +194,34 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Manual Position Control (when no source channel) */}
+              {config.sourceChannel === 0 && (
+                <div className="mb-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-muted-foreground">Manual Position</Label>
+                    <span className="text-xs font-mono text-muted-foreground">{manualAngles[pin] ?? 90}°</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Slider
+                      min={0}
+                      max={180}
+                      step={1}
+                      value={[manualAngles[pin] ?? 90]}
+                      onValueChange={([v]) => handleManualMove(pin, v)}
+                      className="flex-1"
+                    />
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-8"
+                      onClick={() => handleManualMove(pin, 90)}
+                    >
+                      Center
+                    </Button>
+                  </div>
+                </div>
+              )}
+
                 {/* Hardware Settings */}
                 <div className="space-y-3">
                   <h4 className="text-sm font-medium text-muted-foreground border-b border-border pb-1">Hardware Limits</h4>
