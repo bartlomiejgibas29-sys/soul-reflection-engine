@@ -3,7 +3,7 @@ import type { GpsData, GpsSettings } from "@/hooks/useSerial";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { MapPin, Navigation, Signal, Satellite, Compass, RefreshCw, Globe } from "lucide-react";
+import { MapPin, Signal, Satellite, Compass, RefreshCw, Globe } from "lucide-react";
 import { MapContainer, TileLayer, CircleMarker } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import { Button } from "@/components/ui/button";
@@ -48,16 +48,16 @@ const GpsPage = ({ data, settings, onSend }: GpsPageProps) => {
   }, []);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full overflow-y-auto">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full overflow-y-auto p-4">
       
       {/* GPS Configuration */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+      <div className="bg-card border border-border rounded-lg overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-gray-100 border-b border-border">
           <div className="flex items-center gap-2">
-            <Compass size={14} className="text-primary" />
-            <span className="text-xs font-semibold text-foreground">GPS Configuration</span>
+            <Compass size={14} className="text-black" />
+            <span className="text-xs font-semibold text-black">GPS Configuration</span>
           </div>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onSend("GPS_SETTINGS")}>
+          <Button variant="ghost" size="icon" className="h-6 w-6 text-black hover:bg-black/10" onClick={() => onSend("GPS_SETTINGS")}>
             <RefreshCw size={12} />
           </Button>
         </div>
@@ -108,16 +108,16 @@ const GpsPage = ({ data, settings, onSend }: GpsPageProps) => {
       </div>
 
       {/* GPS Status */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
-          <Satellite size={14} className="text-primary" />
-          <span className="text-xs font-semibold text-foreground">GPS Status</span>
+      <div className="bg-card border border-border rounded-lg overflow-hidden flex flex-col">
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 border-b border-border">
+          <Satellite size={14} className="text-black" />
+          <span className="text-xs font-semibold text-black">GPS Status</span>
           <div className="flex items-center gap-1.5 ml-auto">
-            <div className={`w-1.5 h-1.5 rounded-full ${data?.fix ? 'bg-[hsl(var(--sensor-ok))] animate-pulse' : 'bg-destructive'}`} />
-            <span className="text-[10px] text-muted-foreground">{data?.fix ? '3D FIX' : 'NO FIX'}</span>
+            <div className={`w-1.5 h-1.5 rounded-full ${data?.fix ? 'bg-green-600 animate-pulse' : 'bg-red-500'}`} />
+            <span className="text-[10px] text-gray-600 font-medium">{data?.fix ? '3D FIX' : 'NO FIX'}</span>
           </div>
         </div>
-        <div className="p-4">
+        <div className="p-4 flex-1">
           {!data && (
             <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
               No GPS data detected — not connected or wrong port. Verify UART configuration on the Ports page.
@@ -134,41 +134,70 @@ const GpsPage = ({ data, settings, onSend }: GpsPageProps) => {
         </div>
       </div>
 
-      {/* Satellite Signal Strength */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden flex flex-col">
-        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
-          <Signal size={14} className="text-primary" />
-          <span className="text-xs font-semibold text-foreground">Satellite Signal</span>
-          <span className="text-[10px] text-muted-foreground ml-auto">{data?.satellites?.length ?? 0} tracked</span>
+      {/* GPS Signal Strength Table */}
+      <div className="bg-[#333333] border border-border rounded-lg overflow-hidden flex flex-col h-[400px]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-2 bg-gray-100 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold text-black">GPS Signal Strength</span>
+          </div>
+          <div className="w-4 h-4 rounded-full border border-black/20 flex items-center justify-center text-black/50 hover:bg-black/5 cursor-help">
+            <span className="text-[10px] font-bold">?</span>
+          </div>
         </div>
-        <div className="flex-1 overflow-auto p-3">
+
+        {/* Table Content */}
+        <div className="flex-1 overflow-auto bg-[#333333] p-0">
           {(data?.satellites?.length ?? 0) === 0 ? (
             <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
               No satellites tracked
             </div>
           ) : (
-            <div className="space-y-1">
-              {data?.satellites?.map((sat, i) => (
-                <div key={i} className="flex items-center gap-2 py-1">
-                  <span className="text-[10px] font-mono text-muted-foreground w-14">{sat.gnssId} {sat.satId}</span>
-                  <div className="flex-1 h-2 bg-[hsl(0,0%,8%)] rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        sat.signalStrength > 50 ? 'bg-[hsl(var(--sensor-ok))]' : sat.signalStrength > 30 ? 'bg-primary' : 'bg-destructive'
-                      }`}
-                      style={{ width: `${Math.min(100, sat.signalStrength)}%` }}
-                    />
-                    ? 'bg-[hsl(var(--sensor-ok))] text-[hsl(var(--sensor-ok-foreground,0,0%,0%))]'
-                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                    sat.status === 'used' ? 'bg-[hsl(var(--sensor-ok))]/15 text-[hsl(var(--sensor-ok))]' : 'bg-destructive/15 text-destructive'
-                  }`}>{sat.status}</span>
-                </div>
-              ))}
-                      : sat.quality === 'unusable' || sat.quality === 'no_signal'
-                        ? 'bg-destructive text-destructive-foreground'
-                      <td className="px-3 py-1.5 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${qualityBg}`}>
-                          {sat.quality}
+            <table className="w-full text-left border-collapse">
+              <thead className="sticky top-0 bg-[#333333] z-10">
+                <tr>
+                  <th className="px-4 py-2 text-xs font-normal text-gray-300 border-b border-gray-600">Gnss ID</th>
+                  <th className="px-4 py-2 text-xs font-normal text-gray-300 border-b border-gray-600">Sat ID</th>
+                  <th className="px-4 py-2 text-xs font-normal text-gray-300 border-b border-gray-600 w-[200px]">Signal Strength</th>
+                  <th className="px-4 py-2 text-xs font-normal text-gray-300 border-b border-gray-600">Status</th>
+                  <th className="px-4 py-2 text-xs font-normal text-gray-300 border-b border-gray-600">Quality</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data?.satellites?.map((sat, i) => {
+                  const isUsed = sat.status === 'used';
+                  const isLocked = sat.quality === 'fully locked' || sat.quality === 'code_locked' || sat.quality === 'fully_locked';
+                  
+                  // Status badge color
+                  const statusBg = isUsed 
+                    ? 'bg-[#16a34a]' // green-600
+                    : (sat.gnssId === 'SBAS' ? 'bg-[#f59e0b]' : 'bg-[#dc2626]'); // amber or red
+                  
+                  // Quality badge color
+                  const qualityBg = isLocked 
+                    ? 'bg-[#16a34a]' 
+                    : (sat.quality === 'searching' || sat.quality === 'acquired' ? 'bg-[#dc2626]' : 'bg-[#dc2626]');
+
+                  return (
+                    <tr key={i} className="border-b border-gray-600/50 hover:bg-white/5 transition-colors">
+                      <td className="px-4 py-2 text-xs text-gray-200">{sat.gnssId}</td>
+                      <td className="px-4 py-2 text-xs text-gray-200">{sat.satId}</td>
+                      <td className="px-4 py-2">
+                        <div className="w-full h-1.5 bg-gray-600 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full ${sat.signalStrength > 30 ? 'bg-[#16a34a]' : 'bg-gray-400'}`} 
+                            style={{ width: `${Math.min(100, (sat.signalStrength / 50) * 100)}%` }}
+                          />
+                        </div>
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold text-white uppercase ${statusBg}`}>
+                          {sat.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold text-white ${qualityBg}`}>
+                          {sat.quality.replace('_', ' ')}
                         </span>
                       </td>
                     </tr>
@@ -191,14 +220,15 @@ const GpsPage = ({ data, settings, onSend }: GpsPageProps) => {
             {data?.fix ? `${data.latitude.toFixed(6)}, ${data.longitude.toFixed(6)}` : "Waiting for fix..."}
           </span>
         </div>
-        <div className="flex-1">
+        <div className="flex-1 h-full">
           {data?.fix ? (
             <MapContainer
-              {...{ center: [data.latitude, data.longitude], zoom: 18 } as any}
+              center={[data.latitude, data.longitude]}
+              zoom={18}
               className="w-full h-full"
             >
-              <TileLayer {...{ url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" } as any} />
-              <CircleMarker {...{ center: [data.latitude, data.longitude], radius: 10, pathOptions: { color: "#f59e0b" } } as any} />
+              <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" />
+              <CircleMarker center={[data.latitude, data.longitude]} radius={10} pathOptions={{ color: "#f59e0b" }} />
             </MapContainer>
           ) : (
             <div className="flex items-center justify-center w-full h-full bg-[hsl(0,0%,8%)]">

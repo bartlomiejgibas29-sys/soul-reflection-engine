@@ -126,6 +126,259 @@ void restartUART3() {
     }
 }
 
+uint8_t pinModeArr[22];
+int pinValArr[22];
+
+static bool isValidUserPin(int pin) {
+    if (pin == 20 || pin == 21) return false;
+    if (pin >= 0 && pin <= 10) return true;
+    if (pin >= 18 && pin <= 21) return true;
+    return false;
+}
+
+static void servoDetachIfAny(int pin) {
+    if (pin < 0 || pin >= 22) return;
+    if (pinModeArr[pin] == 2) {
+        ledcDetach(pin);
+    }
+}
+
+static void applyPinRuntime(int pin, uint8_t mode, int value) {
+    if (!isValidUserPin(pin)) return;
+    servoDetachIfAny(pin);
+    if (mode == 0) {
+        pinMode(pin, INPUT);
+    } else if (mode == 1) {
+        pinMode(pin, OUTPUT);
+        digitalWrite(pin, value ? HIGH : LOW);
+    } else if (mode == 2) {
+        // Find custom config or use defaults
+        int freq = 50;
+        for (int i = 0; i < servoCount; i++) {
+            if (servoConfigs[i].pin == pin) {
+                freq = servoConfigs[i].frequency;
+                break;
+            }
+        }
+
+        // New LEDC API (v3.0.0+)
+        ledcAttach(pin, freq, 16);
+        
+        int us = 1500; // default middle
+        uint32_t periodUs = 1000000 / freq;
+        uint32_t duty = (uint32_t)((us * 65535ULL) / periodUs);
+        ledcWrite(pin, duty);
+    } else if (mode == 3) {
+        pinMode(pin, OUTPUT);
+        digitalWrite(pin, LOW);
+    }
+}
+
+void initPinConfig() {
+    for (int i = 0; i < 22; i++) {
+        pinModeArr[i] = 0;
+        pinValArr[i] = 0;
+    }
+    int steeringFound = -1;
+    int pinsToInit[] = {0,1,2,3,4,5,6,7,8,9,10,20,21};
+    for (unsigned i = 0; i < sizeof(pinsToInit)/sizeof(pinsToInit[0]); i++) {
+        int p = pinsToInit[i];
+        int m = 0;
+        int v = 0;
+        prefs.begin("sys_config", true);
+        m = prefs.getInt((String("pin_mode_") + String(p)).c_str(), 0);
+        v = prefs.getInt((String("pin_val_") + String(p)).c_str(), 0);
+        prefs.end();
+        if (m == 3) {
+            if (steeringFound == -1) steeringFound = p;
+            else m = 0;
+        }
+        pinModeArr[p] = (uint8_t)m;
+        pinValArr[p] = v;
+        applyPinRuntime(p, pinModeArr[p], pinValArr[p]);
+    }
+}
+
+void reportAllPins() {
+    int pinsToInit[] = {0,1,2,3,4,5,6,7,8,9,10,20,21};
+    for (unsigned i = 0; i < sizeof(pinsToInit)/sizeof(pinsToInit[0]); i++) {
+        int p = pinsToInit[i];
+        const char* modeStr = "DISABLED";
+        if (pinModeArr[p] == 1) modeStr = "LIGHT";
+        else if (pinModeArr[p] == 2) modeStr = "SERVO";
+        else if (pinModeArr[p] == 3) modeStr = "STEERING";
+        Serial.printf("PIN_CONF,%d,%s,%d\n", p, modeStr, pinValArr[p]);
+    }
+}
+
+static void persistPin(int pin) {
+    prefs.begin("sys_config", false);
+    prefs.putInt((String("pin_mode_") + String(pin)).c_str(), pinModeArr[pin]);
+    prefs.putInt((String("pin_val_") + String(pin)).c_str(), pinValArr[pin]);
+    prefs.end();
+}
+
+static void setPinModeCommand(int pin, const String& modeStr, int valueOpt, bool hasValue) {
+    if (!isValidUserPin(pin)) {
+        Serial.printf("PIN_CONF,%d,DISABLED,0\n", pin);
+        return;
+    }
+    if ((pin == u1_rx || pin == u1_tx) && u1_enabled) { Serial.printf("PIN_CONF,%d,%s,%d\n", pin, "DISABLED", 0); return; }
+    if ((pin == u2_rx || pin == u2_tx) && u2_enabled) { Serial.printf("PIN_CONF,%d,%s,%d\n", pin, "DISABLED", 0); return; }
+    if ((pin == u3_rx || pin == u3_tx) && u3_enabled) { Serial.printf("PIN_CONF,%d,%s,%d\n", pin, "DISABLED", 0); return; }
+    uint8_t m = 0;
+    if (modeStr == "DISABLED") m = 0;
+    else if (modeStr == "LIGHT") m = 1;
+    else if (modeStr == "SERVO") m = 2;
+    else if (modeStr == "STEERING") m = 3;
+    int v = hasValue ? valueOpt : 0;
+    if (m == 3) {
+        for (int i = 0; i < 22; i++) {
+            if (pinModeArr[i] == 3 && i != pin) {
+                pinModeArr[i] = 0;
+                pinValArr[i] = 0;
+                applyPinRuntime(i, 0, 0);
+                persistPin(i);
+                Serial.printf("PIN_CONF,%d,DISABLED,0\n", i);
+            }
+        }
+    }
+    pinModeArr[pin] = m;
+    pinValArr[pin] = v;
+    applyPinRuntime(pin, m, v);
+    persistPin(pin);
+    const char* ms = "DISABLED";
+    if (m == 1) ms = "LIGHT";
+    else if (m == 2) ms = "SERVO";
+    else if (m == 3) ms = "STEERING";
+    Serial.printf("PIN_CONF,%d,%s,%d\n", pin, ms, v);
+}
+
+// --- SERVO CONFIGURATION HELPERS ---
+static void persistServo(int idx) {
+    if (idx < 0 || idx >= servoCount) return;
+    prefs.begin("sys_config", false);
+    String base = "srv_" + String(idx) + "_";
+    ServoConfig &c = servoConfigs[idx];
+    prefs.putInt((base + "pin").c_str(), c.pin);
+    prefs.putInt((base + "frq").c_str(), c.frequency);
+    prefs.putInt((base + "min").c_str(), c.minPulse);
+    prefs.putInt((base + "max").c_str(), c.maxPulse);
+    prefs.putInt((base + "spd").c_str(), c.speed);
+    prefs.putInt((base + "src").c_str(), c.sourceChannel);
+    prefs.putInt((base + "npts").c_str(), c.numPoints);
+    for (int i = 0; i < 8; i++) {
+        String pbase = base + "p" + String(i);
+        if (i < c.numPoints) {
+            prefs.putInt((pbase + "i").c_str(), c.points[i].inValue);
+            prefs.putInt((pbase + "o").c_str(), c.points[i].outAngle);
+            prefs.putBool((pbase + "p").c_str(), c.points[i].proportional);
+        }
+    }
+    prefs.putInt("srv_count", servoCount);
+    prefs.end();
+}
+
+static void setPinModeCommand(String cmd) {
+    // Format: SET_PIN_MODE:pin:MODE[:value]
+    int parts[4];
+    int count = 0;
+    int lastPos = 0;
+    for (int i = 0; i < 4; i++) {
+        int nextPos = cmd.indexOf(':', lastPos);
+        if (nextPos == -1) {
+            if (lastPos < cmd.length()) count++;
+            break;
+        }
+        count++;
+        lastPos = nextPos + 1;
+    }
+
+    // Manual split
+    int c1 = cmd.indexOf(':');
+    int c2 = cmd.indexOf(':', c1 + 1);
+    int c3 = cmd.indexOf(':', c2 + 1);
+
+    int pin = cmd.substring(c1 + 1, c2).toInt();
+    String mode = (c3 == -1) ? cmd.substring(c2 + 1) : cmd.substring(c2 + 1, c3);
+    int val = (c3 == -1) ? 0 : cmd.substring(c3 + 1).toInt();
+    setPinModeCommand(pin, mode, val, (c3 != -1));
+}
+
+void reportServoConfigs() {
+    for (int i = 0; i < servoCount; i++) {
+        ServoConfig &c = servoConfigs[i];
+        Serial.printf("SERVO_CFG,%d,%d,%d,%d,%d,%d,%d",
+            c.pin, c.frequency, c.minPulse, c.maxPulse, c.speed,
+            c.sourceChannel, c.numPoints);
+        for (int j = 0; j < c.numPoints; j++) {
+            Serial.printf(",%d,%d,%d", c.points[j].inValue, c.points[j].outAngle, c.points[j].proportional ? 1 : 0);
+        }
+        Serial.println();
+    }
+}
+
+void setServoConfigCommand(String cmd) {
+    // Format: SET_SERVO_CFG:pin:freq:min:max:speed:src:npts[:i1:o1:p1:i2:o2:p2...]
+    int numParts = 1;
+    for (int i = 0; i < cmd.length(); i++) if (cmd[i] == ':') numParts++;
+    
+    if (numParts < 8) {
+        Serial.println("!! ERR: Invalid servo config format");
+        return;
+    }
+    
+    // Split
+    String parts[35]; // Cmd + 7 fixed + up to 8*3 point values
+    int count = 0;
+    int lastPos = 0;
+    for (int i = 0; i < 35; i++) {
+        int nextPos = cmd.indexOf(':', lastPos);
+        if (nextPos == -1) {
+            parts[i] = cmd.substring(lastPos);
+            count++;
+            break;
+        }
+        parts[i] = cmd.substring(lastPos, nextPos);
+        count++;
+        lastPos = nextPos + 1;
+    }
+
+    int pin = parts[1].toInt();
+    int idx = findServoIdx(pin);
+    if (idx == -1) {
+        if (servoCount >= MAX_SERVOS) {
+            Serial.println("!! ERR: Max servos reached");
+            return;
+        }
+        idx = servoCount++;
+        servoConfigs[idx].currentPos = 90.0f;
+    }
+
+    ServoConfig &c = servoConfigs[idx];
+    c.pin = pin;
+    c.frequency = parts[2].toInt();
+    c.minPulse = parts[3].toInt();
+    c.maxPulse = parts[4].toInt();
+    c.speed = parts[5].toInt();
+    c.sourceChannel = parts[6].toInt();
+    c.numPoints = parts[7].toInt();
+    if (c.numPoints > 8) c.numPoints = 8;
+    
+    for (int j = 0; j < c.numPoints; j++) {
+        int baseIdx = 8 + j*3;
+        if (baseIdx + 2 < count) {
+            c.points[j].inValue = parts[baseIdx].toInt();
+            c.points[j].outAngle = parts[baseIdx + 1].toInt();
+            c.points[j].proportional = parts[baseIdx + 2].toInt() == 1;
+        }
+    }
+
+    persistServo(idx);
+    applyPinRuntime(pin, 2, 0); 
+    Serial.printf(">> OK: Servo config saved for pin %d\n", pin);
+}
+
 // Deklaracje funkcji z gps_logic.ino
 void configureGps();
 
@@ -178,10 +431,10 @@ void processCommand(String cmd) {
                       u3_enabled?"EN":"DI", u3_type.c_str(), u3_rx, u3_tx, u3_baud);
     }
     else if (cmd == "PIN_TABLE") {
-        Serial.println("UART,EN, RX, TX, Baud, Type");
-        Serial.printf("U1,%s,%d,%d,%ld,%s\n", u1_enabled?"ENABLED":"DISABLED", u1_rx, u1_tx, u1_baud, u1_type.c_str());
-        Serial.printf("U2,%s,%d,%d,%ld,%s\n", u2_enabled?"ENABLED":"DISABLED", u2_rx, u2_tx, u2_baud, u2_type.c_str());
-        Serial.printf("U3,%s,%d,%d,%ld,%s\n", u3_enabled?"ENABLED":"DISABLED", u3_rx, u3_tx, u3_baud, u3_type.c_str());
+        Serial.printf("UART_CONF,1,%s,%d,%d,%ld,%s\n", u1_enabled?"ENABLED":"DISABLED", u1_rx, u1_tx, u1_baud, u1_type.c_str());
+        Serial.printf("UART_CONF,2,%s,%d,%d,%ld,%s\n", u2_enabled?"ENABLED":"DISABLED", u2_rx, u2_tx, u2_baud, u2_type.c_str());
+        Serial.printf("UART_CONF,3,%s,%d,%d,%ld,%s\n", u3_enabled?"ENABLED":"DISABLED", u3_rx, u3_tx, u3_baud, u3_type.c_str());
+        reportAllPins();
     }
     else if (cmd == "FULL_CONFIG") {
         Serial.println("DEVICE,esp32c3,1.0.0");
@@ -213,6 +466,7 @@ void processCommand(String cmd) {
         Serial.print(gps_home_once ? 1 : 0); Serial.print(",");
         Serial.print(gps_ground_assist); Serial.print(",");
         Serial.println(gps_mag_declination);
+        reportServoConfigs();
     }
     else if (cmd == "RX_SETTINGS") {
         Serial.print("RX_SETTINGS,");
@@ -382,5 +636,16 @@ void processCommand(String cmd) {
             Serial2.end();
         }
         Serial.println(">> GPS Mode DISABLED");
+    }
+    else if (cmd.startsWith("SET_PIN_MODE:")) {
+        // Implementacja w pliku serial_comm.ino (zaktualizowana)
+        setPinModeCommand(cmd);
+    }
+    else if (cmd.startsWith("SET_SERVO_CFG:")) {
+        // Format: SET_SERVO_CFG:pin:freq:min:max:speed:src:inMin:inMax:outMin:outMax
+        setServoConfigCommand(cmd);
+    }
+    else if (cmd == "SERVO_TABLE") {
+        reportServoConfigs();
     }
 }

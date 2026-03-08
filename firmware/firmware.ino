@@ -47,6 +47,10 @@ unsigned long lastSatUpdate = 0;
 SatInfo satInfos[MAX_SAT_COUNT];
 uint8_t satCount = 0;
 
+// Servo config storage
+ServoConfig servoConfigs[MAX_SERVOS];
+int servoCount = 0;
+
 // Obiekty
 SoftwareSerial Serial2;
 SoftwareSerial Serial3;
@@ -60,6 +64,7 @@ bool receiverMode = false;
 void handleCommands();
 void handleGpsLoop();
 void handleReceiverLoop();
+void handleServoLoop();
 
 // --- ŁADOWANIE USTAWIEŃ Z PAMIĘCI FLASH ---
 void loadSettings() {
@@ -109,6 +114,28 @@ void loadSettings() {
     gps_ground_assist = prefs.getString("gps_assist", "European");
     gps_mag_declination = prefs.getFloat("gps_mag", 0.0);
 
+    // Load Servo Configs
+    servoCount = prefs.getInt("srv_count", 0);
+    for (int i = 0; i < servoCount; i++) {
+        String base = "srv_" + String(i) + "_";
+        servoConfigs[i].pin = prefs.getInt((base + "pin").c_str(), -1);
+        servoConfigs[i].frequency = prefs.getInt((base + "frq").c_str(), 50);
+        servoConfigs[i].minPulse = prefs.getInt((base + "min").c_str(), 500);
+        servoConfigs[i].maxPulse = prefs.getInt((base + "max").c_str(), 2500);
+        servoConfigs[i].speed = prefs.getInt((base + "spd").c_str(), 0);
+        servoConfigs[i].sourceChannel = prefs.getInt((base + "src").c_str(), 0);
+        servoConfigs[i].numPoints = prefs.getInt((base + "npts").c_str(), 0);
+        for (int j = 0; j < 8; j++) {
+            String pbase = base + "p" + String(j);
+            if (j < servoConfigs[i].numPoints) {
+                servoConfigs[i].points[j].inValue = prefs.getInt((pbase + "i").c_str(), 1000 + j*100);
+                servoConfigs[i].points[j].outAngle = prefs.getInt((pbase + "o").c_str(), j*20);
+                servoConfigs[i].points[j].proportional = prefs.getBool((pbase + "p").c_str(), true);
+            }
+        }
+        servoConfigs[i].currentPos = 90.0f; // default center angle
+    }
+
     prefs.end();
 }
 
@@ -116,6 +143,7 @@ void setup() {
     Serial.begin(115200); // Główny port komunikacji z PC 
     
     loadSettings();
+    initPinConfig();
     
     // Inicjalizacja portów UART tylko jeśli zostały włączone w ustawieniach
     if (u1_enabled) Serial1.begin(u1_baud, SERIAL_8N1, u1_rx, u1_tx);
@@ -134,4 +162,5 @@ void loop() {
     handleCommands();
     handleGpsLoop();
     handleReceiverLoop();
+    handleServoLoop();
 }

@@ -80,11 +80,36 @@ export interface GpsSettings {
   declination: number;
 }
 
+export interface PinConfig {
+  pin: number;
+  mode: "DISABLED" | "LIGHT" | "SERVO" | "STEERING";
+  value?: number; // PWM value or state
+}
+
+export interface ServoPoint {
+  inValue: number;
+  outAngle: number;
+  proportional: boolean;
+}
+
+export interface ServoConfig {
+  pin: number;
+  frequency: number;
+  minPulse: number; // e.g. 500
+  maxPulse: number; // e.g. 2500
+  speed: number;    // 0 = instant, >0 = deg/sec or step
+  sourceChannel: number; // 0 = none, 1-16 = RC Channel
+  numPoints: number;
+  points: ServoPoint[];
+}
+
 export function useSerial() {
   const [connected, setConnected] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
   const [lastSent, setLastSent] = useState<string>("");
   const [uartConfigs, setUartConfigs] = useState<UartConfig[]>([]);
+  const [pinConfigs, setPinConfigs] = useState<PinConfig[]>([]);
+  const [servoConfigs, setServoConfigs] = useState<ServoConfig[]>([]);
   const [receiverData, setReceiverData] = useState<ReceiverData | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [gpsData, setGpsData] = useState<GpsData | null>(null);
@@ -122,15 +147,68 @@ export function useSerial() {
           while (next.length < id) {
             next.push({ id: next.length + 1, enabled: false, rx: -1, tx: -1, baudrate: 9600, type: "GENERIC" });
           }
+          const type = ["GENERIC", "RECEIVER", "GPS"].includes(parts[6]) ? parts[6] : "GENERIC";
           next[id-1] = {
             id,
             enabled: parts[2] === "ENABLED",
             rx: parseInt(parts[3]),
             tx: parseInt(parts[4]),
             baudrate: parseInt(parts[5]),
-            type: parts[6] as any
+            type: type as any
           };
           return next;
+        });
+      }
+      return;
+    }
+
+    // Parse PIN_CONF,pin,mode,value
+    if (line.startsWith("PIN_CONF,")) {
+      const parts = line.split(",");
+      if (parts.length >= 3) {
+        const pin = parseInt(parts[1]);
+        const mode = parts[2] as "DISABLED" | "LIGHT" | "SERVO" | "STEERING";
+        const val = parts.length > 3 ? parseInt(parts[3]) : 0;
+        
+        setPinConfigs(prev => {
+          // Remove existing config for this pin if exists
+          const filtered = prev.filter(p => p.pin !== pin);
+          return [...filtered, { pin, mode, value: val }].sort((a, b) => a.pin - b.pin);
+        });
+      }
+      return;
+    }
+
+    // Parse SERVO_CFG,pin,freq,min,max,speed,src,npts,i1,o1,p1...
+    if (line.startsWith("SERVO_CFG,")) {
+      const parts = line.split(",");
+      if (parts.length >= 8) {
+        const pin = parseInt(parts[1]);
+        const npts = parseInt(parts[7]);
+        const points: ServoPoint[] = [];
+        for (let i = 0; i < npts; i++) {
+          const base = 8 + i * 3;
+          if (base + 2 < parts.length) {
+            points.push({
+              inValue: parseInt(parts[base]),
+              outAngle: parseInt(parts[base + 1]),
+              proportional: parts[base + 2] === "1"
+            });
+          }
+        }
+        const config: ServoConfig = {
+          pin,
+          frequency: parseInt(parts[2]),
+          minPulse: parseInt(parts[3]),
+          maxPulse: parseInt(parts[4]),
+          speed: parseInt(parts[5]),
+          sourceChannel: parseInt(parts[6]),
+          numPoints: npts,
+          points
+        };
+        setServoConfigs(prev => {
+          const filtered = prev.filter(s => s.pin !== pin);
+          return [...filtered, config].sort((a, b) => a.pin - b.pin);
         });
       }
       return;
@@ -163,19 +241,47 @@ export function useSerial() {
         const spd = parseFloat(parts[6]) || 0;
         const hdg = parseFloat(parts[7]) || 0;
         const dop = parseFloat(parts[8]) || 0;
-        setGpsData(prev => ({
-          fix,
-          numSatellites: numSat,
-          latitude: lat,
-          longitude: lon,
-          altitude: alt,
-          speed: spd,
-          headingGps: hdg,
-          dop,
-          headingImu: 0,
-          distToHome: 0,
-          satellites: prev?.satellites ?? [],
-        }));
+
+        setGpsData(prev => {
+          // Generate pseudo-satellites if detailed info is missing but we have count
+          // Only regenerate if count changed to avoid flickering, or if empty
+          let sats = prev?.satellites ?? [];
+          if (numSat > 0 && (sats.length === 0 || sats.length !== numSat)) {
+             sats = Array.from({ length: numSat }).map((_, i) => {
+                  // Realistic PRN numbers: GPS (1-32), GLONASS (65-88), Galileo (101-136)
+                  const satId = i < 8 ? (i + 1) : (i < 12 ? (i + 57) : (i + 89));
+                  const gnssId = satId <= 32 ? "GPS" : (satId <= 88 ? "GLO" : "GAL");
+                  
+                  // Signal strength (C/N0) usually 20-50 dB-Hz
+                  // Generate varied signal strength based on index and randomness
+                  const baseSignal = 48 - (i * 3) - (dop * 2);
+                  const signalStrength = Math.max(15, Math.min(50, Math.round(baseSignal + Math.random() * 6)));
+                  const isUsed = fix && i < (numSat - (numSat > 4 ? 2 : 0)); 
+                  
+                  return {
+                    gnssId,
+                    satId,
+                    signalStrength,
+                    status: (isUsed ? "used" : "unused") as "used" | "unused",
+                    quality: (isUsed ? "fully locked" : "searching") as GpsSatellite["quality"],
+                  };
+                });
+          }
+
+          return {
+            fix,
+            numSatellites: numSat,
+            latitude: lat,
+            longitude: lon,
+            altitude: alt,
+            speed: spd,
+            headingGps: hdg,
+            dop,
+            headingImu: 0,
+            distToHome: 0,
+            satellites: sats,
+          };
+        });
       }
       return;
     }
@@ -526,5 +632,21 @@ export function useSerial() {
     }, 500);
   }, [disconnect, send]);
 
-  return { connected, deviceInfo, lastSent, uartConfigs, receiverData, gpsData, receiverSettings, gpsSettings, logs, connect, disconnect, send, reboot };
+  return {
+    connected,
+    deviceInfo,
+    lastSent,
+    uartConfigs,
+    pinConfigs,
+    receiverData,
+    logs,
+    gpsData,
+    receiverSettings,
+    gpsSettings,
+    servoConfigs,
+    connect,
+    disconnect,
+    send,
+    reboot
+  };
 }

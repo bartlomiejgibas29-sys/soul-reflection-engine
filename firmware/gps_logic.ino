@@ -161,6 +161,14 @@ void handleGpsLoop() {
         if (u1_type == "GPS" && u1_enabled) while (Serial1.available()) feedByte(Serial1.read());
         if (u2_type == "GPS" && u2_enabled) while (Serial2.available()) feedByte(Serial2.read());
         if (u3_type == "GPS" && u3_enabled) while (Serial3.available()) feedByte(Serial3.read());
+        
+        // Handle NMEA GSV if UBX is not providing data (fallback)
+        // TinyGPSPlus does not expose GSV detailed data easily, but we can check if it parsed it.
+        // For simplicity, if we have 0 sats from UBX but TinyGPS reports sats, we might want to trust TinyGPS count,
+        // but TinyGPS doesn't give us C/N0 per sat.
+        // So we stick to UBX for detailed info.
+        // However, we can enhance TinyGPS usage by implementing a custom NMEA parser for $GPGSV if needed.
+        // For now, let's just ensure we are sending whatever we have.
     }
 
     if (millis() - lastGpsUpdate > 200) { // 5Hz

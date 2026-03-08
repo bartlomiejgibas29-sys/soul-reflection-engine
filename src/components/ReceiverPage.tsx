@@ -297,7 +297,9 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
                       return (
                         <div key={`stick-${idx}`} className="space-y-1">
                           <div className="flex justify-between items-center">
-                            <span className="text-[10px] font-bold text-foreground">{label}</span>
+                            <span className="text-[10px] font-bold text-foreground">
+                              {label} <span className="text-muted-foreground font-normal ml-1">(CH{channelNum})</span>
+                            </span>
                             <span className="text-[10px] font-mono text-muted-foreground">{val}</span>
                           </div>
                           <div className="relative h-3 bg-[hsl(0,0%,8%)] rounded-full overflow-hidden border border-border/10">

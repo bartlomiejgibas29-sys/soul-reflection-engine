@@ -76,4 +76,34 @@ struct SatInfo {
 extern SatInfo satInfos[MAX_SAT_COUNT];
 extern uint8_t satCount;
 
+// --- Servo Configuration ---
+struct ServoPoint {
+    int inValue;  // RC value (e.g., 1000)
+    int outAngle; // Servo angle (e.g., 90)
+    bool proportional; // true = interpolate from prev, false = jump
+};
+
+struct ServoConfig {
+    int pin;
+    int frequency;    // Hz
+    int minPulse;     // us
+    int maxPulse;     // us
+    int speed;        // deg/sec or step (0=instant)
+    int sourceChannel;// 0=None, 1-16=RC Channel
+    int numPoints;
+    ServoPoint points[8]; // Max 8 points per servo
+    float currentPos; // Internal state for smoothing
+};
+#define MAX_SERVOS 6
+extern ServoConfig servoConfigs[MAX_SERVOS];
+extern int servoCount;
+
+// --- Pin configuration (UI: PinsPage)
+// Dostępne tryby: DISABLED | LIGHT | SERVO | STEERING
+// Implementacja i stan runtime są utrzymywane w serial_comm.ino.
+// Te funkcje inicjalizują i raportują stan pinów oraz obsługują komendy.
+void initPinConfig();
+void reportAllPins();
+int findServoIdx(int pin);
+
 #endif

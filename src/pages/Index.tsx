@@ -7,6 +7,8 @@ import LandingPage from "@/components/LandingPage";
 import SetupPage from "@/components/SetupPage";
 import ReceiverPage from "@/components/ReceiverPage";
 import GpsPage from "@/components/GpsPage";
+import PinsPage from "@/components/PinsPage";
+import ServoPage from "@/components/ServoPage";
 import Console from "@/components/Console";
 import { useSerial } from "@/hooks/useSerial";
 
@@ -18,13 +20,35 @@ const Index = () => {
       return "Setup";
     }
   });
-  const { connected, deviceInfo, lastSent, uartConfigs, receiverData, receiverSettings, gpsData, gpsSettings, logs, connect, disconnect, send, reboot } = useSerial();
+  const { connected, deviceInfo, lastSent, uartConfigs, pinConfigs, servoConfigs, receiverData, receiverSettings, gpsData, gpsSettings, logs, connect, disconnect, send, reboot } = useSerial();
 
   useEffect(() => {
     if (!connected) {
       setActiveTab("Setup"); 
+      return;
     }
-  }, [connected]);
+
+    // Refresh data when tab changes
+    switch (activeTab) {
+      case "Ports":
+      case "Pins":
+        send("PIN_TABLE");
+        break;
+      case "Servo":
+        send("PIN_TABLE");
+        send("SERVO_TABLE");
+        break;
+      case "Receiver":
+        send("RX_SETTINGS");
+        break;
+      case "GPS":
+        send("GPS_SETTINGS");
+        break;
+      case "Setup":
+        send("FULL_CONFIG");
+        break;
+    }
+  }, [connected, activeTab]);
 
   // Handle Save & Reboot from children
   const handleReboot = () => {
@@ -67,6 +91,10 @@ const Index = () => {
                 
                 {activeTab === "Ports" && <PortsPage uartConfigs={uartConfigs} connected={connected} onSend={send} />}
                 
+                {activeTab === "Pins" && <PinsPage uartConfigs={uartConfigs} pinConfigs={pinConfigs} onSend={send} />}
+                
+                {activeTab === "Servo" && <ServoPage pinConfigs={pinConfigs} servoConfigs={servoConfigs} onSend={send} />}
+
                 {activeTab === "Receiver" && <ReceiverPage data={receiverData} settings={receiverSettings} onSend={send} />}
 
                 {activeTab === "GPS" && <GpsPage data={gpsData} settings={gpsSettings} onSend={send} />}

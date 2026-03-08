@@ -1,8 +1,10 @@
-import { Cable, Radio, Terminal, Settings, Map } from "lucide-react";
+import { Cable, Radio, Terminal, Settings, Map, Cpu, SlidersHorizontal } from "lucide-react";
 
 const navItems = [
   { icon: Settings, label: "Setup" },
   { icon: Cable, label: "Ports" },
+  { icon: Cpu, label: "Pins" },
+  { icon: SlidersHorizontal, label: "Servo" },
   { icon: Radio, label: "Receiver" },
   { icon: Map, label: "GPS" },
   { icon: Terminal, label: "CLI" },
