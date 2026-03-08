@@ -362,6 +362,13 @@ void setServoConfigCommand(String cmd) {
     }
 
     int pin = parts[1].toInt();
+    if (!isValidUserPin(pin)) {
+        Serial.println("!! ERR: Invalid servo pin");
+        return;
+    }
+
+    compactInvalidServoConfigs();
+
     int idx = findServoIdx(pin);
     if (idx == -1) {
         if (servoCount >= MAX_SERVOS) {
@@ -381,11 +388,30 @@ void setServoConfigCommand(String cmd) {
     c.reverse = parts[7].toInt() == 1;
     c.rate = parts[8].toFloat();
     c.speed = parts[9].toInt();
+
+    if (c.frequency < 10) c.frequency = 50;
+    if (c.minUs < 500) c.minUs = 500;
+    if (c.maxUs > 2500) c.maxUs = 2500;
+    if (c.midUs < c.minUs) c.midUs = c.minUs;
+    if (c.midUs > c.maxUs) c.midUs = c.maxUs;
+    if (c.sourceChannel < 0) c.sourceChannel = 0;
+    if (c.sourceChannel > 16) c.sourceChannel = 16;
+    if (c.rate <= 0.0f) c.rate = 1.0f;
+    if (c.speed < 0) c.speed = 0;
+
     c.currentUs = (float)c.midUs;
     c.lastWrittenUs = 0; // Force rewrite
 
+    // Ensure pin works as SERVO at runtime
+    pinModeArr[pin] = 2;
+    pinValArr[pin] = 0;
+    persistPin(pin);
+
     persistServo(idx);
     applyPinRuntime(pin, 2, 0);
+    Serial.printf("SERVO_CFG,%d,%d,%d,%d,%d,%d,%d,%.2f,%d\n",
+        c.pin, c.frequency, c.minUs, c.midUs, c.maxUs,
+        c.sourceChannel, c.reverse ? 1 : 0, c.rate, c.speed);
     Serial.printf(">> OK: Servo config saved for pin %d\n", pin);
 }
 
