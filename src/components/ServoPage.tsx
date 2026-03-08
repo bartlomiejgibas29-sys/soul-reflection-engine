@@ -125,6 +125,13 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
     });
   };
 
+  const [manualAngles, setManualAngles] = useState<Record<number, number>>({});
+
+  const handleManualMove = async (pin: number, angle: number) => {
+    setManualAngles(prev => ({ ...prev, [pin]: angle }));
+    await onSend(`SERVO_MOVE:${pin}:${angle}`);
+  };
+
   const handleSave = async (pin: number) => {
     const c = localConfigs[pin];
     if (!c) return;
