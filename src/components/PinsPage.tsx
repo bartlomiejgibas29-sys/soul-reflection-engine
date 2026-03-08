@@ -9,6 +9,7 @@ import type { UartConfig, PinConfig } from "@/hooks/useSerial";
 
 // Definicja pinów dla ESP32-C3
 const AVAILABLE_PINS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 21];
+const RESERVED_USB_PINS = [20, 21];
 
 interface PinsPageProps {
   uartConfigs: UartConfig[];
