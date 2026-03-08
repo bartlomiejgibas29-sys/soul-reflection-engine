@@ -251,12 +251,7 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
         })}
       </div>
 
-      {/* Manual control toggle + Save */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Switch checked={manualEnabled} onCheckedChange={setManualEnabled} />
-          <Label className="text-xs text-muted-foreground">Wyłącz tryb podglądu na żywo</Label>
-        </div>
+      <div className="flex justify-end">
         <Button onClick={handleSaveAll} className="px-6">
           <Save className="mr-2 h-4 w-4" />
           Zapisz
