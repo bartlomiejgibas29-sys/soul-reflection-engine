@@ -174,35 +174,23 @@ export function useSerial() {
       return;
     }
 
-    // Parse SERVO_CFG,pin,freq,min,max,speed,src,npts,i1,o1,p1...
+    // Parse SERVO_CFG,pin,freq,minUs,midUs,maxUs,src,reverse,rate,speed
     if (line.startsWith("SERVO_CFG,")) {
       const parts = line.split(",");
-      if (parts.length >= 8) {
-        const pin = parseInt(parts[1]);
-        const npts = parseInt(parts[7]);
-        const points: ServoPoint[] = [];
-        for (let i = 0; i < npts; i++) {
-          const base = 8 + i * 3;
-          if (base + 2 < parts.length) {
-            points.push({
-              inValue: parseInt(parts[base]),
-              outAngle: parseInt(parts[base + 1]),
-              proportional: parts[base + 2] === "1"
-            });
-          }
-        }
+      if (parts.length >= 10) {
         const config: ServoConfig = {
-          pin,
+          pin: parseInt(parts[1]),
           frequency: parseInt(parts[2]),
-          minPulse: parseInt(parts[3]),
-          maxPulse: parseInt(parts[4]),
-          speed: parseInt(parts[5]),
+          minUs: parseInt(parts[3]),
+          midUs: parseInt(parts[4]),
+          maxUs: parseInt(parts[5]),
           sourceChannel: parseInt(parts[6]),
-          numPoints: npts,
-          points
+          reverse: parts[7] === "1",
+          rate: parseFloat(parts[8]),
+          speed: parseInt(parts[9]),
         };
         setServoConfigs(prev => {
-          const filtered = prev.filter(s => s.pin !== pin);
+          const filtered = prev.filter(s => s.pin !== config.pin);
           return [...filtered, config].sort((a, b) => a.pin - b.pin);
         });
       }
