@@ -1,14 +1,10 @@
 import { useState, useEffect } from "react";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { SlidersHorizontal, RefreshCw, Save, Activity, Plus, Trash2, Play } from "lucide-react";
-import { Slider } from "@/components/ui/slider";
-import type { PinConfig, ServoConfig, ServoPoint } from "@/hooks/useSerial";
-import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SlidersHorizontal, RefreshCw, Save } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import type { PinConfig, ServoConfig } from "@/hooks/useSerial";
 
 interface ServoPageProps {
   pinConfigs: PinConfig[];
@@ -16,147 +12,106 @@ interface ServoPageProps {
   onSend: (data: string) => Promise<void> | void;
 }
 
-const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
-  const [localConfigs, setLocalConfigs] = useState<Record<number, ServoConfig>>({});
-  const [loading, setLoading] = useState(false);
+const CHANNELS = ["CH1", "CH2", "CH3", "CH4", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12"];
 
-  // Filter pins that are set to SERVO mode
+const DEFLECTION_OPTIONS = [
+  { value: "1", label: "Wychylenie: 1x" },
+  { value: "0.5", label: "Wychylenie: 0.5x" },
+  { value: "1.5", label: "Wychylenie: 1.5x" },
+  { value: "2", label: "Wychylenie: 2x" },
+];
+
+const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
   const servoPins = pinConfigs.filter(p => p.mode === "SERVO").map(p => p.pin);
 
+  const [configs, setConfigs] = useState<Record<number, {
+    min: number;
+    mid: number;
+    max: number;
+    channels: boolean[];
+    deflection: string;
+    speed: number;
+    frequency: number;
+  }>>({});
+
+  const [livePositions, setLivePositions] = useState<Record<number, number>>({});
+
   useEffect(() => {
-    // Request current servo configs when mounting
     onSend("SERVO_TABLE");
   }, []);
 
   useEffect(() => {
-    const map: Record<number, ServoConfig> = {};
-    servoConfigs.forEach(c => {
-      map[c.pin] = c;
-    });
-    // For pins that are SERVO but have no config yet, create default
-    servoPins.forEach(pin => {
-      if (!map[pin]) {
-        map[pin] = {
-          pin,
-          frequency: 50,
-          minPulse: 500,
-          maxPulse: 2500,
-          speed: 0,
-          sourceChannel: 0,
-          numPoints: 2,
-          points: [
-            { inValue: 1000, outAngle: 0, proportional: true },
-            { inValue: 2000, outAngle: 180, proportional: true }
-          ]
-        };
+    const map: Record<number, any> = {};
+    servoPins.forEach((pin, _idx) => {
+      const existing = servoConfigs.find(c => c.pin === pin);
+      const channels = new Array(16).fill(false);
+      if (existing && existing.sourceChannel >= 1) {
+        channels[existing.sourceChannel - 1] = true;
       }
+      map[pin] = {
+        min: existing?.minPulse ?? 1000,
+        mid: existing ? Math.round((existing.minPulse + existing.maxPulse) / 2) : 1500,
+        max: existing?.maxPulse ?? 2000,
+        channels,
+        deflection: "1",
+        speed: existing?.speed ?? 0,
+        frequency: existing?.frequency ?? 50,
+      };
     });
-    setLocalConfigs(map);
+    setConfigs(map);
+
+    // Update live positions
+    const positions: Record<number, number> = {};
+    servoPins.forEach(pin => {
+      const pinConf = pinConfigs.find(p => p.pin === pin);
+      positions[pin] = pinConf?.value ?? 1500;
+    });
+    setLivePositions(positions);
   }, [servoConfigs, pinConfigs]);
 
-  const handleChange = (pin: number, field: keyof ServoConfig, value: any) => {
-    setLocalConfigs(prev => ({
+  const handleFieldChange = (pin: number, field: string, value: any) => {
+    setConfigs(prev => ({
       ...prev,
       [pin]: { ...prev[pin], [field]: value }
     }));
   };
 
-  const handlePointChange = (pin: number, idx: number, field: keyof ServoPoint, value: any) => {
-    setLocalConfigs(prev => {
-      const config = prev[pin];
-      if (!config || !config.points) return prev;
-      const newPoints = [...config.points];
-      newPoints[idx] = { ...newPoints[idx], [field]: value };
-      
-      // If we change inValue, we should sort
-      if (field === "inValue") {
-        newPoints.sort((a, b) => (a.inValue || 0) - (b.inValue || 0));
-      }
-      
-      return {
-        ...prev,
-        [pin]: { ...config, points: newPoints }
-      };
+  const handleChannelToggle = (pin: number, chIdx: number) => {
+    setConfigs(prev => {
+      const cfg = prev[pin];
+      if (!cfg) return prev;
+      const channels = [...cfg.channels];
+      // Only one channel active at a time
+      const newChannels = channels.map((_, i) => i === chIdx ? !channels[chIdx] : false);
+      return { ...prev, [pin]: { ...cfg, channels: newChannels } };
     });
   };
 
-  const addPoint = (pin: number) => {
-    setLocalConfigs(prev => {
-      const config = prev[pin];
-      if (!config || (config.points && config.points.length >= 8)) return prev;
-      
-      const points = config.points || [];
-      const lastPoint = points.length > 0 
-        ? points[points.length - 1] 
-        : { inValue: 1000, outAngle: 90, proportional: true };
-
-      const newPoint = { 
-        inValue: Math.min(2000, lastPoint.inValue + 100), 
-        outAngle: Math.min(180, lastPoint.outAngle + 10),
-        proportional: true
-      };
-
-      const newPoints = [...points, newPoint].sort((a, b) => a.inValue - b.inValue);
-
-      return {
-        ...prev,
-        [pin]: { 
-          ...config, 
-          points: newPoints,
-          numPoints: newPoints.length
-        }
-      };
-    });
-  };
-
-  const removePoint = (pin: number, idx: number) => {
-    setLocalConfigs(prev => {
-      const config = prev[pin];
-      if (!config || !config.points || config.points.length <= 1) return prev;
-      const newPoints = config.points.filter((_, i) => i !== idx);
-      return {
-        ...prev,
-        [pin]: { 
-          ...config, 
-          points: newPoints,
-          numPoints: newPoints.length
-        }
-      };
-    });
-  };
-
-  const [manualAngles, setManualAngles] = useState<Record<number, number>>({});
-
-  const handleManualMove = async (pin: number, angle: number) => {
-    setManualAngles(prev => ({ ...prev, [pin]: angle }));
-    await onSend(`SERVO_MOVE:${pin}:${angle}`);
-  };
-
-  const handleSave = async (pin: number) => {
-    const c = localConfigs[pin];
-    if (!c) return;
-    setLoading(true);
-    // Command format: SET_SERVO_CFG:pin:freq:min:max:speed:src:npts:i1:o1:p1:i2:o2:p2...
-    let cmd = `SET_SERVO_CFG:${c.pin}:${c.frequency}:${c.minPulse}:${c.maxPulse}:${c.speed}:${c.sourceChannel}:${c.points.length}`;
-    c.points.forEach(p => {
-      cmd += `:${p.inValue}:${p.outAngle}:${p.proportional ? 1 : 0}`;
-    });
-    await onSend(cmd);
-    setTimeout(() => setLoading(false), 500);
+  const handleSaveAll = async () => {
+    for (const pin of servoPins) {
+      const cfg = configs[pin];
+      if (!cfg) continue;
+      const sourceChannel = cfg.channels.findIndex(c => c) + 1; // 0 if none
+      const actualSource = sourceChannel > 0 ? sourceChannel : 0;
+      // Build command with 2 default points
+      const cmd = `SET_SERVO_CFG:${pin}:${cfg.frequency}:${cfg.min}:${cfg.max}:${cfg.speed}:${actualSource}:2:${cfg.min}:0:1:${cfg.max}:180:1`;
+      await onSend(cmd);
+    }
   };
 
   if (servoPins.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
         <SlidersHorizontal size={48} className="mb-4 opacity-50" />
-        <h3 className="text-lg font-semibold">No Servo Pins Configured</h3>
-        <p>Go to the Pins tab and set some pins to "SERVO" mode first.</p>
+        <h3 className="text-lg font-semibold">Brak skonfigurowanych serw</h3>
+        <p className="text-sm">Przejdź do zakładki Pins i ustaw piny w tryb "SERVO".</p>
       </div>
     );
   }
 
   return (
-    <div className="h-full overflow-y-auto p-4 space-y-4">
+    <div className="h-full overflow-auto p-4 space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <SlidersHorizontal className="text-primary" />
@@ -168,198 +123,124 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        {servoPins.map(pin => {
-          const config = localConfigs[pin];
-          if (!config) return null;
-          
-          // Get current value from pinConfigs if available
-          const currentVal = pinConfigs.find(p => p.pin === pin)?.value ?? 0;
+      {/* Info bar */}
+      <div className="text-center text-xs text-primary font-medium bg-primary/10 rounded py-1.5">
+        Zmień kierunek w TX, aby dopasować
+      </div>
 
-          return (
-            <Card key={pin} className="p-4 border border-border">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="font-mono">GPIO {pin}</Badge>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Activity size={14} className="text-blue-500" />
-                  <div className="text-xs text-muted-foreground font-mono bg-muted px-2 py-1 rounded">
-                    POS: {currentVal}
-                  </div>
-                  <Button size="sm" onClick={() => handleSave(pin)} disabled={loading}>
-                    <Save className="mr-2 h-4 w-4" />
-                    Save
-                  </Button>
-                </div>
-              </div>
-
-              {/* Manual Position Control (when no source channel) */}
-              {config.sourceChannel === 0 && (
-                <div className="mb-4 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs text-muted-foreground">Manual Position</Label>
-                    <span className="text-xs font-mono text-muted-foreground">{manualAngles[pin] ?? 90}°</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Slider
-                      min={0}
-                      max={180}
-                      step={1}
-                      value={[manualAngles[pin] ?? 90]}
-                      onValueChange={([v]) => handleManualMove(pin, v)}
-                      className="flex-1"
+      {/* Table */}
+      <div className="overflow-x-auto border border-border rounded-lg">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="border-b border-border bg-muted/50">
+              <th className="px-3 py-2 text-left text-xs font-semibold text-primary whitespace-nowrap">Nazwa</th>
+              <th className="px-2 py-2 text-center text-xs font-semibold text-primary whitespace-nowrap">MIN</th>
+              <th className="px-2 py-2 text-center text-xs font-semibold text-primary whitespace-nowrap">MID</th>
+              <th className="px-2 py-2 text-center text-xs font-semibold text-primary whitespace-nowrap">MAX</th>
+              {CHANNELS.map(ch => (
+                <th key={ch} className="px-1 py-2 text-center text-xs font-semibold text-foreground whitespace-nowrap">{ch}</th>
+              ))}
+              <th className="px-2 py-2 text-center text-xs font-semibold text-primary whitespace-nowrap">Wychylenie i kierunek</th>
+            </tr>
+          </thead>
+          <tbody>
+            {servoPins.map((pin, idx) => {
+              const cfg = configs[pin];
+              if (!cfg) return null;
+              return (
+                <tr key={pin} className="border-b border-border hover:bg-muted/30 transition-colors">
+                  <td className="px-3 py-2 text-primary font-medium whitespace-nowrap">Servo {idx + 1}</td>
+                  <td className="px-1 py-1.5">
+                    <Input
+                      type="number"
+                      value={cfg.min}
+                      onChange={e => handleFieldChange(pin, "min", parseInt(e.target.value) || 0)}
+                      className="h-8 w-20 text-center text-xs"
                     />
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="h-8"
-                      onClick={() => handleManualMove(pin, 90)}
-                    >
-                      Center
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-3">
-                  <h4 className="text-sm font-medium text-muted-foreground border-b border-border pb-1">Hardware Limits</h4>
-                  
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Frequency (Hz)</Label>
-                      <Input 
-                        type="number" 
-                        value={config.frequency} 
-                        onChange={e => handleChange(pin, "frequency", parseInt(e.target.value))}
+                  </td>
+                  <td className="px-1 py-1.5">
+                    <Input
+                      type="number"
+                      value={cfg.mid}
+                      onChange={e => handleFieldChange(pin, "mid", parseInt(e.target.value) || 0)}
+                      className="h-8 w-20 text-center text-xs"
+                    />
+                  </td>
+                  <td className="px-1 py-1.5">
+                    <Input
+                      type="number"
+                      value={cfg.max}
+                      onChange={e => handleFieldChange(pin, "max", parseInt(e.target.value) || 0)}
+                      className="h-8 w-20 text-center text-xs"
+                    />
+                  </td>
+                  {cfg.channels.map((checked, chIdx) => (
+                    <td key={chIdx} className="px-1 py-1.5 text-center">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => handleChannelToggle(pin, chIdx)}
+                        className="h-4 w-4"
                       />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Speed (deg/s)</Label>
-                      <Input 
-                        type="number" 
-                        value={config.speed} 
-                        onChange={e => handleChange(pin, "speed", parseInt(e.target.value))}
-                        placeholder="0=Instant"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Min Pulse (us)</Label>
-                      <Input 
-                        type="number" 
-                        value={config.minPulse} 
-                        onChange={e => handleChange(pin, "minPulse", parseInt(e.target.value))}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Max Pulse (us)</Label>
-                      <Input 
-                        type="number" 
-                        value={config.maxPulse} 
-                        onChange={e => handleChange(pin, "maxPulse", parseInt(e.target.value))}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Mixer / Logic Settings */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between border-b border-border pb-1">
-                    <h4 className="text-sm font-medium text-muted-foreground">AUX Binding</h4>
-                  </div>
-                  
-                  <div className="space-y-1">
-                    <Label className="text-xs">Source Channel</Label>
-                    <Select 
-                      value={config.sourceChannel.toString()} 
-                      onValueChange={val => handleChange(pin, "sourceChannel", parseInt(val))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Source" />
+                    </td>
+                  ))}
+                  <td className="px-1 py-1.5">
+                    <Select value={cfg.deflection} onValueChange={v => handleFieldChange(pin, "deflection", v)}>
+                      <SelectTrigger className="h-8 w-32 text-xs">
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="0">None (Manual/Fixed)</SelectItem>
-                        
-                        <SelectGroup>
-                          <SelectLabel className="text-[10px] uppercase text-muted-foreground px-2 py-1.5">Stick Channels</SelectLabel>
-                          {Array.from({length: 4}).map((_, i) => (
-                            <SelectItem key={i+1} value={(i+1).toString()}>Channel {i+1}</SelectItem>
-                          ))}
-                        </SelectGroup>
-
-                        <SelectGroup>
-                          <SelectLabel className="text-[10px] uppercase text-muted-foreground px-2 py-1.5">AUX Channels</SelectLabel>
-                          {Array.from({length: 12}).map((_, i) => (
-                            <SelectItem key={i+5} value={(i+5).toString()}>AUX {i+1} (CH {i+5})</SelectItem>
-                          ))}
-                        </SelectGroup>
+                        {DEFLECTION_OPTIONS.map(o => (
+                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
-                  </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-[1fr_1fr_40px_32px] gap-2 items-center px-1">
-                      <div className="text-[10px] font-semibold text-muted-foreground text-center">Input</div>
-                      <div className="text-[10px] font-semibold text-muted-foreground text-center">Angle</div>
-                      <div className="text-[10px] font-semibold text-muted-foreground text-center">Prop</div>
-                      <div></div>
-                    </div>
+      {/* Live servo positions */}
+      <div className="bg-muted/30 border border-border rounded-lg p-4">
+        <h3 className="text-sm font-medium text-center mb-3 text-foreground">Serwa</h3>
+        <div className="flex items-end justify-center gap-2 flex-wrap">
+          {servoPins.map((pin, idx) => {
+            const cfg = configs[pin];
+            const pos = livePositions[pin] ?? 1500;
+            const min = cfg?.min ?? 1000;
+            const max = cfg?.max ?? 2000;
+            const pct = Math.max(0, Math.min(100, ((pos - min) / (max - min)) * 100));
 
-                    <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
-                      {config.points.map((pt, idx) => (
-                        <div key={idx} className="grid grid-cols-[1fr_1fr_40px_32px] gap-2 items-center">
-                          <Input 
-                            type="number" 
-                            value={pt.inValue} 
-                            onChange={e => handlePointChange(pin, idx, "inValue", parseInt(e.target.value))}
-                            className="h-8 text-center px-1"
-                          />
-                          <Input 
-                            type="number" 
-                            value={pt.outAngle} 
-                            onChange={e => handlePointChange(pin, idx, "outAngle", parseInt(e.target.value))}
-                            className="h-8 text-center px-1"
-                          />
-                          <div className="flex justify-center">
-                            <Switch 
-                              checked={pt.proportional} 
-                              onCheckedChange={checked => handlePointChange(pin, idx, "proportional", checked)}
-                              className="scale-75"
-                            />
-                          </div>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                            onClick={() => removePoint(pin, idx)}
-                            disabled={config.points.length <= 1}
-                          >
-                            <Trash2 size={14} />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="w-full h-8 border-dashed"
-                      onClick={() => addPoint(pin)}
-                      disabled={config.points.length >= 8}
-                    >
-                      <Plus size={14} className="mr-2" />
-                      Add Point
-                    </Button>
-                  </div>
+            return (
+              <div key={pin} className="flex flex-col items-center w-16">
+                <span className={`text-xs font-bold mb-1 ${idx < 4 ? "text-primary" : "text-destructive"}`}>
+                  {idx + 1}
+                </span>
+                <div className="w-full h-24 bg-muted rounded border border-border relative overflow-hidden">
+                  <div
+                    className="absolute bottom-0 w-full transition-all duration-150"
+                    style={{
+                      height: `${pct}%`,
+                      backgroundColor: "hsl(var(--primary))",
+                      opacity: 0.7,
+                    }}
+                  />
                 </div>
+                <span className="text-[10px] font-mono text-muted-foreground mt-1">{pos}</span>
               </div>
-            </Card>
-          );
-        })}
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Save button */}
+      <div className="flex justify-end">
+        <Button onClick={handleSaveAll} className="px-6">
+          <Save className="mr-2 h-4 w-4" />
+          Zapisz
+        </Button>
       </div>
     </div>
   );
