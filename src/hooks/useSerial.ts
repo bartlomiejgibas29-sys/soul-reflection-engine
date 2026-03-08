@@ -86,21 +86,16 @@ export interface PinConfig {
   value?: number; // PWM value or state
 }
 
-export interface ServoPoint {
-  inValue: number;
-  outAngle: number;
-  proportional: boolean;
-}
-
 export interface ServoConfig {
   pin: number;
   frequency: number;
-  minPulse: number; // e.g. 500
-  maxPulse: number; // e.g. 2500
-  speed: number;    // 0 = instant, >0 = deg/sec or step
+  minUs: number;
+  midUs: number;
+  maxUs: number;
   sourceChannel: number; // 0 = none, 1-16 = RC Channel
-  numPoints: number;
-  points: ServoPoint[];
+  reverse: boolean;
+  rate: number;          // deflection multiplier (1.0 = 100%)
+  speed: number;         // us/sec, 0 = instant
 }
 
 export function useSerial() {
