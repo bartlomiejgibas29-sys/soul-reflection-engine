@@ -291,9 +291,9 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
                           />
                           <div className="flex justify-center">
                             <Switch 
-                              size="sm"
                               checked={pt.proportional} 
                               onCheckedChange={checked => handlePointChange(pin, idx, "proportional", checked)}
+                              className="scale-75"
                             />
                           </div>
                           <Button 
