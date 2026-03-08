@@ -5,6 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SlidersHorizontal, RefreshCw, Save } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import type { PinConfig, ServoConfig } from "@/hooks/useSerial";
 
 interface ServoPageProps {
@@ -28,7 +30,7 @@ interface LocalServoConfig {
   min: number;
   mid: number;
   max: number;
-  channels: boolean[];  // 16 booleans, one per RC channel
+  channels: boolean[];
   rate: string;
   reverse: boolean;
   speed: number;
@@ -40,6 +42,7 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
   const [configs, setConfigs] = useState<Record<number, LocalServoConfig>>({});
   const [livePositions, setLivePositions] = useState<Record<number, number>>({});
   const [manualUs, setManualUs] = useState<Record<number, number>>({});
+  const [manualEnabled, setManualEnabled] = useState(false);
   const throttleRef = useRef<Record<number, NodeJS.Timeout>>({});
 
   useEffect(() => {
@@ -64,7 +67,6 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
         speed: existing?.speed ?? 0,
         frequency: existing?.frequency ?? 50,
       };
-      // Init manual position to mid
       if (!manualUs[pin]) {
         setManualUs(prev => ({ ...prev, [pin]: existing?.midUs ?? 1500 }));
       }
@@ -90,7 +92,6 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
     setConfigs(prev => {
       const cfg = prev[pin];
       if (!cfg) return prev;
-      // Radio-button style: only one channel at a time
       const newChannels = cfg.channels.map((_, i) => i === chIdx ? !cfg.channels[chIdx] : false);
       return { ...prev, [pin]: { ...cfg, channels: newChannels } };
     });
@@ -98,7 +99,6 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
 
   const handleManualMove = (pin: number, us: number) => {
     setManualUs(prev => ({ ...prev, [pin]: us }));
-    // Throttle serial sends to ~20Hz
     if (throttleRef.current[pin]) clearTimeout(throttleRef.current[pin]);
     throttleRef.current[pin] = setTimeout(() => {
       onSend(`SERVO_MOVE:${pin}:${us}`);
@@ -111,7 +111,6 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
       if (!cfg) continue;
       const sourceChannel = cfg.channels.findIndex(c => c) + 1;
       const actualSource = sourceChannel > 0 ? sourceChannel : 0;
-      // SET_SERVO_CFG:pin:freq:min:mid:max:src:rev:rate:speed
       const cmd = `SET_SERVO_CFG:${pin}:${cfg.frequency}:${cfg.min}:${cfg.mid}:${cfg.max}:${actualSource}:${cfg.reverse ? 1 : 0}:${cfg.rate}:${cfg.speed}`;
       await onSend(cmd);
     }
@@ -146,141 +145,120 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
         Zmień kierunek w TX, aby dopasować
       </div>
 
-      {/* Config Table */}
-      <div className="overflow-x-auto border border-border rounded-lg">
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr className="border-b border-border bg-muted/50">
-              <th className="px-3 py-2 text-left text-xs font-semibold text-primary whitespace-nowrap">Nazwa</th>
-              <th className="px-2 py-2 text-center text-xs font-semibold text-primary whitespace-nowrap">MIN</th>
-              <th className="px-2 py-2 text-center text-xs font-semibold text-primary whitespace-nowrap">MID</th>
-              <th className="px-2 py-2 text-center text-xs font-semibold text-primary whitespace-nowrap">MAX</th>
-              {CHANNELS.map(ch => (
-                <th key={ch} className="px-1 py-2 text-center text-xs font-semibold text-foreground whitespace-nowrap">{ch}</th>
-              ))}
-              <th className="px-2 py-2 text-center text-xs font-semibold text-primary whitespace-nowrap">Rate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {servoPins.map((pin, idx) => {
-              const cfg = configs[pin];
-              if (!cfg) return null;
-              return (
-                <tr key={pin} className="border-b border-border hover:bg-muted/30 transition-colors">
-                  <td className="px-3 py-2 text-primary font-medium whitespace-nowrap">
-                    Servo {idx + 1}
-                    <span className="text-[10px] text-muted-foreground ml-1">(GPIO {pin})</span>
-                  </td>
-                  <td className="px-1 py-1.5">
-                    <Input type="number" value={cfg.min}
-                      onChange={e => handleFieldChange(pin, "min", parseInt(e.target.value) || 0)}
-                      className="h-8 w-20 text-center text-xs" />
-                  </td>
-                  <td className="px-1 py-1.5">
-                    <Input type="number" value={cfg.mid}
-                      onChange={e => handleFieldChange(pin, "mid", parseInt(e.target.value) || 0)}
-                      className="h-8 w-20 text-center text-xs" />
-                  </td>
-                  <td className="px-1 py-1.5">
-                    <Input type="number" value={cfg.max}
-                      onChange={e => handleFieldChange(pin, "max", parseInt(e.target.value) || 0)}
-                      className="h-8 w-20 text-center text-xs" />
-                  </td>
-                  {cfg.channels.map((checked, chIdx) => (
-                    <td key={chIdx} className="px-1 py-1.5 text-center">
-                      <Checkbox checked={checked}
-                        onCheckedChange={() => handleChannelToggle(pin, chIdx)}
-                        className="h-4 w-4" />
-                    </td>
-                  ))}
-                  <td className="px-1 py-1.5">
-                    <Select value={cfg.rate} onValueChange={v => handleFieldChange(pin, "rate", v)}>
-                      <SelectTrigger className="h-8 w-20 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {RATE_OPTIONS.map(o => (
-                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Live servo position bars + manual control */}
-      <div className="bg-muted/30 border border-border rounded-lg p-4">
-        <h3 className="text-sm font-medium text-center mb-3 text-foreground">Serwa — podgląd na żywo</h3>
-        <div className="flex items-end justify-center gap-3 flex-wrap">
-          {servoPins.map((pin, idx) => {
-            const cfg = configs[pin];
-            const pos = livePositions[pin] ?? 1500;
-            const min = cfg?.min ?? 1000;
-            const max = cfg?.max ?? 2000;
-            const mid = cfg?.mid ?? 1500;
-            const pct = Math.max(0, Math.min(100, ((pos - min) / (max - min)) * 100));
-            const hasSource = cfg?.channels.some(c => c) ?? false;
-
-            return (
-              <div key={pin} className="flex flex-col items-center w-16">
-                <span className={`text-xs font-bold mb-1 ${idx < 4 ? "text-primary" : "text-destructive"}`}>
-                  {idx + 1}
-                </span>
-                <div className="w-full h-24 bg-muted rounded border border-border relative overflow-hidden">
-                  {/* Mid-point marker */}
-                  <div className="absolute w-full border-t border-dashed border-muted-foreground/30"
-                    style={{ bottom: `${((mid - min) / (max - min)) * 100}%` }} />
-                  <div
-                    className="absolute bottom-0 w-full transition-all duration-150"
-                    style={{
-                      height: `${pct}%`,
-                      backgroundColor: "hsl(var(--primary))",
-                      opacity: 0.7,
-                    }}
-                  />
-                </div>
-                <span className="text-[10px] font-mono text-muted-foreground mt-1">{pos}</span>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Manual sliders for servos without source channel */}
-        {servoPins.some(pin => {
+      {/* Per-servo cards: config + manual control */}
+      <div className="space-y-3">
+        {servoPins.map((pin, idx) => {
           const cfg = configs[pin];
-          return cfg && !cfg.channels.some(c => c);
-        }) && (
-          <div className="mt-4 space-y-2 border-t border-border pt-3">
-            <p className="text-[10px] text-muted-foreground text-center uppercase tracking-wider">Sterowanie ręczne (serwa bez przypisanego kanału)</p>
-            {servoPins.map((pin, idx) => {
-              const cfg = configs[pin];
-              if (!cfg || cfg.channels.some(c => c)) return null;
-              const us = manualUs[pin] ?? cfg.mid;
-              return (
-                <div key={pin} className="flex items-center gap-3">
-                  <span className="text-xs text-primary font-medium w-16">Servo {idx + 1}</span>
+          if (!cfg) return null;
+          const us = manualUs[pin] ?? cfg.mid;
+          const pos = livePositions[pin] ?? 1500;
+          const pct = Math.max(0, Math.min(100, ((pos - cfg.min) / (cfg.max - cfg.min)) * 100));
+
+          return (
+            <div key={pin} className="border border-border rounded-lg overflow-hidden">
+              {/* Servo header row */}
+              <div className="flex items-center gap-3 px-3 py-2 bg-muted/40 border-b border-border">
+                <span className="text-sm font-semibold text-primary">Servo {idx + 1}</span>
+                <span className="text-[10px] text-muted-foreground font-mono">(GPIO {pin})</span>
+                {/* Live position bar inline */}
+                <div className="flex-1 flex items-center gap-2">
+                  <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden border border-border">
+                    <div className="h-full transition-all duration-150 rounded-full"
+                      style={{ width: `${pct}%`, backgroundColor: "hsl(var(--primary))", opacity: 0.8 }} />
+                  </div>
+                  <span className="text-[10px] font-mono text-muted-foreground w-14 text-right">{pos} µs</span>
+                </div>
+              </div>
+
+              {/* Config row: MIN / MID / MAX / Channel checkboxes / Rate */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/20">
+                      <th className="px-2 py-1 text-center text-[10px] font-semibold text-primary">MIN</th>
+                      <th className="px-2 py-1 text-center text-[10px] font-semibold text-primary">MID</th>
+                      <th className="px-2 py-1 text-center text-[10px] font-semibold text-primary">MAX</th>
+                      {CHANNELS.map(ch => (
+                        <th key={ch} className="px-0.5 py-1 text-center text-[10px] font-semibold text-foreground">{ch}</th>
+                      ))}
+                      <th className="px-2 py-1 text-center text-[10px] font-semibold text-primary">Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="px-1 py-1.5">
+                        <Input type="number" value={cfg.min}
+                          onChange={e => handleFieldChange(pin, "min", parseInt(e.target.value) || 0)}
+                          className="h-7 w-16 text-center text-xs" />
+                      </td>
+                      <td className="px-1 py-1.5">
+                        <Input type="number" value={cfg.mid}
+                          onChange={e => handleFieldChange(pin, "mid", parseInt(e.target.value) || 0)}
+                          className="h-7 w-16 text-center text-xs" />
+                      </td>
+                      <td className="px-1 py-1.5">
+                        <Input type="number" value={cfg.max}
+                          onChange={e => handleFieldChange(pin, "max", parseInt(e.target.value) || 0)}
+                          className="h-7 w-16 text-center text-xs" />
+                      </td>
+                      {cfg.channels.map((checked, chIdx) => (
+                        <td key={chIdx} className="px-0.5 py-1.5 text-center">
+                          <Checkbox checked={checked}
+                            onCheckedChange={() => handleChannelToggle(pin, chIdx)}
+                            className="h-3.5 w-3.5" />
+                        </td>
+                      ))}
+                      <td className="px-1 py-1.5">
+                        <Select value={cfg.rate} onValueChange={v => handleFieldChange(pin, "rate", v)}>
+                          <SelectTrigger className="h-7 w-16 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {RATE_OPTIONS.map(o => (
+                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Manual control slider — shown when enabled */}
+              {manualEnabled && (
+                <div className="flex items-center gap-3 px-3 py-2 bg-muted/10 border-t border-border">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider w-14 shrink-0">Ręczne</span>
                   <Slider min={cfg.min} max={cfg.max} step={1}
                     value={[us]}
                     onValueChange={([v]) => handleManualMove(pin, v)}
                     className="flex-1" />
-                  <span className="text-xs font-mono text-muted-foreground w-12 text-right">{us}µs</span>
-                  <Button variant="outline" size="sm" className="h-7 text-xs px-2"
+                  <span className="text-xs font-mono text-muted-foreground w-14 text-right">{us} µs</span>
+                  <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
                     onClick={() => handleManualMove(pin, cfg.mid)}>
                     Center
                   </Button>
+                  <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
+                    onClick={() => handleManualMove(pin, cfg.min)}>
+                    MIN
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-6 text-[10px] px-2"
+                    onClick={() => handleManualMove(pin, cfg.max)}>
+                    MAX
+                  </Button>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      {/* Save */}
-      <div className="flex justify-end">
+      {/* Manual control toggle + Save */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Switch checked={manualEnabled} onCheckedChange={setManualEnabled} />
+          <Label className="text-xs text-muted-foreground">Wyłącz tryb podglądu na żywo</Label>
+        </div>
         <Button onClick={handleSaveAll} className="px-6">
           <Save className="mr-2 h-4 w-4" />
           Zapisz
