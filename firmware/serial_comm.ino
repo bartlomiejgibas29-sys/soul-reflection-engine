@@ -218,6 +218,8 @@ static void persistPin(int pin) {
     prefs.end();
 }
 
+static void removeServoByPin(int pin);
+
 static void setPinModeCommand(int pin, const String& modeStr, int valueOpt, bool hasValue) {
     if (!isValidUserPin(pin)) {
         Serial.printf("PIN_CONF,%d,DISABLED,0\n", pin);
