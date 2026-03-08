@@ -295,20 +295,11 @@ void reportServoConfigs() {
 }
 
 void setServoConfigCommand(String cmd) {
-    // Format: SET_SERVO_CFG:pin:freq:min:max:speed:src:npts[:i1:o1:p1:i2:o2:p2...]
-    int numParts = 1;
-    for (int i = 0; i < cmd.length(); i++) if (cmd[i] == ':') numParts++;
-    
-    if (numParts < 8) {
-        Serial.println("!! ERR: Invalid servo config format");
-        return;
-    }
-    
-    // Split
-    String parts[35]; // Cmd + 7 fixed + up to 8*3 point values
+    // Format: SET_SERVO_CFG:pin:freq:min:mid:max:src:rev:rate:speed
+    String parts[12];
     int count = 0;
     int lastPos = 0;
-    for (int i = 0; i < 35; i++) {
+    for (int i = 0; i < 12; i++) {
         int nextPos = cmd.indexOf(':', lastPos);
         if (nextPos == -1) {
             parts[i] = cmd.substring(lastPos);
@@ -320,6 +311,11 @@ void setServoConfigCommand(String cmd) {
         lastPos = nextPos + 1;
     }
 
+    if (count < 10) {
+        Serial.println("!! ERR: Invalid servo config (need 10 fields)");
+        return;
+    }
+
     int pin = parts[1].toInt();
     int idx = findServoIdx(pin);
     if (idx == -1) {
@@ -328,30 +324,23 @@ void setServoConfigCommand(String cmd) {
             return;
         }
         idx = servoCount++;
-        servoConfigs[idx].currentPos = 90.0f;
     }
 
     ServoConfig &c = servoConfigs[idx];
     c.pin = pin;
     c.frequency = parts[2].toInt();
-    c.minPulse = parts[3].toInt();
-    c.maxPulse = parts[4].toInt();
-    c.speed = parts[5].toInt();
+    c.minUs = parts[3].toInt();
+    c.midUs = parts[4].toInt();
+    c.maxUs = parts[5].toInt();
     c.sourceChannel = parts[6].toInt();
-    c.numPoints = parts[7].toInt();
-    if (c.numPoints > 8) c.numPoints = 8;
-    
-    for (int j = 0; j < c.numPoints; j++) {
-        int baseIdx = 8 + j*3;
-        if (baseIdx + 2 < count) {
-            c.points[j].inValue = parts[baseIdx].toInt();
-            c.points[j].outAngle = parts[baseIdx + 1].toInt();
-            c.points[j].proportional = parts[baseIdx + 2].toInt() == 1;
-        }
-    }
+    c.reverse = parts[7].toInt() == 1;
+    c.rate = parts[8].toFloat();
+    c.speed = parts[9].toInt();
+    c.currentUs = (float)c.midUs;
+    c.lastWrittenUs = 0; // Force rewrite
 
     persistServo(idx);
-    applyPinRuntime(pin, 2, 0); 
+    applyPinRuntime(pin, 2, 0);
     Serial.printf(">> OK: Servo config saved for pin %d\n", pin);
 }
 
