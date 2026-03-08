@@ -64,6 +64,13 @@ const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
   };
 
   const getPinStatus = (pin: number) => {
+    if (RESERVED_USB_PINS.includes(pin)) {
+      return {
+        locked: true,
+        reason: "Reserved for USB/programming (GPIO 20/21)"
+      };
+    }
+
     // Sprawdź czy pin jest używany przez UART
     const uartUsage = uartConfigs.find(u => u.enabled && (u.rx === pin || u.tx === pin));
     if (uartUsage) {
