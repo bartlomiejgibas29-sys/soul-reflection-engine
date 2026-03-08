@@ -685,14 +685,26 @@ void processCommand(String cmd) {
     }
     else if (cmd.startsWith("SERVO_MOVE:")) {
         // Format: SERVO_MOVE:pin:us (microseconds directly)
-        int c1 = cmd.indexOf(':', 11);
-        int pin = cmd.substring(11, c1).toInt();
-        int us = cmd.substring(c1 + 1).toInt();
-        
+        int firstColon = cmd.indexOf(':');
+        int secondColon = cmd.indexOf(':', firstColon + 1);
+        if (firstColon == -1 || secondColon == -1) {
+            Serial.println("!! ERR: Invalid SERVO_MOVE format");
+            return;
+        }
+
+        int pin = cmd.substring(firstColon + 1, secondColon).toInt();
+        int us = cmd.substring(secondColon + 1).toInt();
+
+        if (!isValidUserPin(pin)) {
+            Serial.println("!! ERR: Invalid servo pin");
+            return;
+        }
+
+        compactInvalidServoConfigs();
+
         // Find or create servo config for this pin
         int idx = findServoIdx(pin);
         if (idx == -1) {
-            // Auto-create config for this servo pin
             if (servoCount >= MAX_SERVOS) {
                 Serial.println("!! ERR: Max servos reached");
                 return;
@@ -709,7 +721,7 @@ void processCommand(String cmd) {
             servoConfigs[idx].speed = 0;
             servoConfigs[idx].lastWrittenUs = 0;
         }
-        
+
         // Ensure pin is in SERVO mode and attached
         if (pin >= 0 && pin < 22 && pinModeArr[pin] != 2) {
             pinModeArr[pin] = 2;
@@ -732,7 +744,11 @@ void processCommand(String cmd) {
         uint32_t duty = (uint32_t)(((uint32_t)us * 65535ULL) / periodUs);
         ledcWrite(pin, duty);
         sc.lastWrittenUs = us;
-        
-        Serial.printf(">> SERVO_POS:%d:%d\n", pin, us);
+
+        persistServo(idx);
+        Serial.printf("SERVO_CFG,%d,%d,%d,%d,%d,%d,%d,%.2f,%d\n",
+            sc.pin, sc.frequency, sc.minUs, sc.midUs, sc.maxUs,
+            sc.sourceChannel, sc.reverse ? 1 : 0, sc.rate, sc.speed);
+        Serial.printf("SERVO_POS,%d,%d\n", pin, us);
     }
 }
