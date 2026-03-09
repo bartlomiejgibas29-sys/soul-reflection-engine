@@ -18,10 +18,10 @@ int findServoIdx(int pin) {
     return -1;
 }
 
-// Convert microseconds to LEDC duty (16-bit resolution)
+// Convert microseconds to LEDC duty (12-bit resolution for stability)
 static void writeServoUs(int pin, int frequency, float us) {
     uint32_t periodUs = 1000000UL / frequency;
-    uint32_t duty = (uint32_t)((us * 65535ULL) / periodUs);
+    uint32_t duty = (uint32_t)((us * 4095ULL) / periodUs);
     ledcWrite(pin, duty);
 }
 
@@ -46,17 +46,29 @@ void handleServoLoop() {
             bool validRange = rcVal >= 800 && rcVal <= 2200;
 
             if (freshData && validRange) {
-                // Map RC value to servo output using min/mid/max + rate
-                float deflection = (float)(rcVal - 1500);
+                if (c.mode == 1) { // RANGES MODE
+                     // Iterate through ranges
+                     for (int r = 0; r < c.rangeCount; r++) {
+                         if (rcVal >= c.ranges[r].minIn && rcVal <= c.ranges[r].maxIn) {
+                             targetUs = (float)c.ranges[r].targetUs;
+                             break; // First match wins
+                         }
+                     }
+                } else { // PROPORTIONAL MODE (Default)
+                    // Map RC value to servo output using min/mid/max + rate
+                    float deflection = (float)(rcVal - 1500);
 
-                // Apply rate (deflection multiplier, e.g. 1.0 = 100%)
-                deflection *= c.rate;
+                    // Apply rate (deflection multiplier, e.g. 1.0 = 100%)
+                    deflection *= c.rate;
 
-                // Apply reverse
-                if (c.reverse) deflection = -deflection;
+                    // Apply reverse
+                    if (c.reverse) deflection = -deflection;
 
-                // Target = mid + scaled deflection, clamped to min..max
-                targetUs = (float)c.midUs + deflection;
+                    // Target = mid + scaled deflection, clamped to min..max
+                    targetUs = (float)c.midUs + deflection;
+                }
+                
+                // Final clamp to min/max
                 if (targetUs < (float)c.minUs) targetUs = (float)c.minUs;
                 if (targetUs > (float)c.maxUs) targetUs = (float)c.maxUs;
             }

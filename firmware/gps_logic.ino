@@ -65,19 +65,64 @@ void sendGpsCommand(const uint8_t* cmd, size_t len) {
 void configureGps() {
     if (gps_protocol == "UBLOX" && gps_auto_config) {
         Serial.println(">> Config: UBLOX 10Hz + Galileo/EGNOS");
-        // UBX-CFG-RATE (100ms = 10Hz)
+
+        // 1. Ustawienie Baud Rate na 115200 (jeśli moduł jest na innym, to może nie zadziałać od razu, ale próbujemy)
+        // UBX-CFG-PRT: PortID=1 (UART1), Baud=115200
+        uint8_t cfgPrt[] = {
+            0xB5, 0x62, 0x06, 0x00, 0x14, 0x00, 
+            0x01, 0x00, 0x00, 0x00, 
+            0xD0, 0x08, 0x00, 0x00, // Mode (8N1)
+            0x00, 0xC2, 0x01, 0x00, // Baud: 115200 (0x0001C200)
+            0x07, 0x00, 0x03, 0x00, // In/Out proto (UBX+NMEA)
+            0x00, 0x00, 0x00, 0x00,
+            0xC0, 0x7E // Checksum (pre-calculated for 115200? No, needs calc if changed dynamically)
+        };
+        // Checksum calculation for CFG-PRT
+        uint8_t ckA = 0, ckB = 0;
+        for (int i = 2; i < 24; i++) { ckA += cfgPrt[i]; ckB += ckA; }
+        cfgPrt[24] = ckA; cfgPrt[25] = ckB;
+        sendGpsCommand(cfgPrt, sizeof(cfgPrt));
+        delay(100); // Wait for baud change
+
+        // 2. Wyłączenie NMEA GSV (Satelity w widoku - generuje duży ruch)
+        // UBX-CFG-MSG: Class=0xF0, ID=0x03, Rate=0
+        uint8_t disableGsv[] = {
+            0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 
+            0xF0, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+            0x02, 0x38 // Checksum
+        };
+        sendGpsCommand(disableGsv, sizeof(disableGsv));
+
+        // 3. Wyłączenie NMEA GSA (DOP i aktywne satelity - też spore)
+        // UBX-CFG-MSG: Class=0xF0, ID=0x02, Rate=0
+        uint8_t disableGsa[] = {
+            0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 
+            0xF0, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
+            0x01, 0x31 // Checksum
+        };
+        sendGpsCommand(disableGsa, sizeof(disableGsa));
+
+        // 4. UBX-CFG-RATE (100ms = 10Hz)
         uint8_t cfgRate[] = {0xB5, 0x62, 0x06, 0x08, 0x06, 0x00, 0x64, 0x00, 0x01, 0x00, 0x01, 0x00, 0x7A, 0x12};
         sendGpsCommand(cfgRate, sizeof(cfgRate));
         
-        // UBX-CFG-NAV5 (Airborne < 4g)
+        // 5. UBX-CFG-NAV5 (Airborne < 4g)
         uint8_t cfgNav5[] = {0xB5, 0x62, 0x06, 0x24, 0x24, 0x00, 0xFF, 0xFF, 0x06, 0x03, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x05, 0x00, 0xFA, 0x00, 0xFA, 0x00, 0x64, 0x00, 0x2C, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x16, 0xDC};
         sendGpsCommand(cfgNav5, sizeof(cfgNav5));
         
-        // Enable UBX-NAV-SAT message (class 0x01, id 0x35) on current port
-        // UBX-CFG-MSG: enable NAV-SAT every 5th fix (1Hz at 5Hz rate)
+        // 6. Enable UBX-NAV-SAT message (class 0x01, id 0x35)
+        // Rate = 5 (co 5-ty fix, czyli 2Hz przy 10Hz, lub 1Hz przy 5Hz)
+        // Dzięki temu nie zapychamy łącza, ale wciąż mamy dane dla WWW.
         uint8_t enableNavSat[] = {0xB5, 0x62, 0x06, 0x01, 0x08, 0x00, 
-                                   0x01, 0x35, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 
-                                   0x46, 0xAC};
+                                   0x01, 0x35, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 
+                                   0x4A, 0xBC}; // Recalculated Checksum: 06+01+08+00+01+35+00+05 = 0x4A. ckA=4A. ckB=4A+... wait.
+        // Checksum calc:
+        // 06 01 08 00 01 35 00 05 00 00 00 00
+        // A: 06, 07, 0F, 0F, 10, 45, 45, 4A, 4A, 4A, 4A, 4A
+        // B: 06, 0D, 1C, 1C, 2C, 71, 71, BB, BB, BB, BB, BB
+        // Result: 4A BB
+        enableNavSat[14] = 0x4A; enableNavSat[15] = 0xBB;
+
         sendGpsCommand(enableNavSat, sizeof(enableNavSat));
         
         if (gps_galileo) {

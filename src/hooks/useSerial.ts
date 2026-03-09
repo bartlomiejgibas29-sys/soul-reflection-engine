@@ -86,6 +86,12 @@ export interface PinConfig {
   value?: number; // PWM value or state
 }
 
+export interface ServoRange {
+  minIn: number;
+  maxIn: number;
+  targetUs: number;
+}
+
 export interface ServoConfig {
   pin: number;
   frequency: number;
@@ -96,6 +102,10 @@ export interface ServoConfig {
   reverse: boolean;
   rate: number;          // deflection multiplier (1.0 = 100%)
   speed: number;         // us/sec, 0 = instant
+  mode: number;          // 0=PROPORTIONAL, 1=RANGES
+  minAngle: number;
+  maxAngle: number;
+  ranges: ServoRange[];
 }
 
 export function useSerial() {
@@ -174,24 +184,71 @@ export function useSerial() {
       return;
     }
 
-    // Parse SERVO_CFG,pin,freq,minUs,midUs,maxUs,src,reverse,rate,speed
+    // Parse SERVO_CFG:pin,freq,min,mid,max,src,rev,rate,speed,mode,minAngle,maxAngle
     if (line.startsWith("SERVO_CFG,")) {
       const parts = line.split(",");
       if (parts.length >= 10) {
-        const config: ServoConfig = {
-          pin: parseInt(parts[1]),
-          frequency: parseInt(parts[2]),
-          minUs: parseInt(parts[3]),
-          midUs: parseInt(parts[4]),
-          maxUs: parseInt(parts[5]),
-          sourceChannel: parseInt(parts[6]),
-          reverse: parts[7] === "1",
-          rate: parseFloat(parts[8]),
-          speed: parseInt(parts[9]),
-        };
+        const pin = parseInt(parts[1]);
+        const mode = parts.length >= 11 ? parseInt(parts[10]) : 0;
+        const minAngle = parts.length >= 12 ? parseInt(parts[11]) : 0;
+        const maxAngle = parts.length >= 13 ? parseInt(parts[12]) : 180;
+
         setServoConfigs(prev => {
-          const filtered = prev.filter(s => s.pin !== config.pin);
-          return [...filtered, config].sort((a, b) => a.pin - b.pin);
+          const idx = prev.findIndex(c => c.pin === pin);
+          const newCfg: ServoConfig = {
+            pin,
+            frequency: parseInt(parts[2]),
+            minUs: parseInt(parts[3]),
+            midUs: parseInt(parts[4]),
+            maxUs: parseInt(parts[5]),
+            sourceChannel: parseInt(parts[6]),
+            reverse: parts[7] === "1",
+            rate: parseFloat(parts[8]),
+            speed: parseInt(parts[9]),
+            mode,
+            minAngle,
+            maxAngle,
+            ranges: idx >= 0 ? prev[idx].ranges : [],
+          };
+
+          if (idx >= 0) {
+            const copy = [...prev];
+            copy[idx] = newCfg;
+            return copy;
+          }
+          return [...prev, newCfg].sort((a, b) => a.pin - b.pin);
+        });
+      }
+      return;
+    }
+
+    // Parse SERVO_RNG:pin,idx,minIn,maxIn,targetUs
+    if (line.startsWith("SERVO_RNG,")) {
+      const parts = line.split(",");
+      if (parts.length >= 6) {
+        const pin = parseInt(parts[1]);
+        const rIdx = parseInt(parts[2]);
+        const minIn = parseInt(parts[3]);
+        const maxIn = parseInt(parts[4]);
+        const targetUs = parseInt(parts[5]);
+
+        setServoConfigs(prev => {
+          const sIdx = prev.findIndex(c => c.pin === pin);
+          if (sIdx === -1) return prev;
+
+          const newConfigs = [...prev];
+          const servo = { ...newConfigs[sIdx] };
+          const newRanges = [...(servo.ranges || [])];
+
+          // Expand array if needed
+          while (newRanges.length <= rIdx) {
+            newRanges.push({ minIn: 0, maxIn: 0, targetUs: 1500 });
+          }
+
+          newRanges[rIdx] = { minIn, maxIn, targetUs };
+          servo.ranges = newRanges;
+          newConfigs[sIdx] = servo;
+          return newConfigs;
         });
       }
       return;

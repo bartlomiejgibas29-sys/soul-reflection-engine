@@ -160,9 +160,11 @@ static void applyPinRuntime(int pin, uint8_t mode, int value) {
             freq = servoConfigs[idx].frequency;
             midUs = servoConfigs[idx].midUs;
         }
-        ledcAttach(pin, freq, 16);
+        if (!ledcAttach(pin, freq, 12)) { // 12-bit for stability
+            Serial.printf("!! LEDC Attach FAILED on pin %d\n", pin);
+        }
         uint32_t periodUs = 1000000UL / freq;
-        uint32_t duty = (uint32_t)(((uint32_t)midUs * 65535ULL) / periodUs);
+        uint32_t duty = (uint32_t)(((uint32_t)midUs * 4095ULL) / periodUs);
         ledcWrite(pin, duty);
         if (idx >= 0) {
             servoConfigs[idx].currentUs = (float)midUs;
@@ -267,11 +269,12 @@ static void setPinModeCommand(int pin, const String& modeStr, int valueOpt, bool
 }
 
 // --- SERVO CONFIGURATION HELPERS ---
-static void persistServo(int idx) {
-    if (idx < 0 || idx >= servoCount) return;
-    prefs.begin("sys_config", false);
-    String base = "srv_" + String(idx) + "_";
+void persistServo(int idx) {
+    if (idx < 0 || idx >= MAX_SERVOS) return;
     ServoConfig &c = servoConfigs[idx];
+    String base = "srv_" + String(idx) + "_";
+    
+    prefs.begin("sys_config", false);
     prefs.putInt((base + "pin").c_str(), c.pin);
     prefs.putInt((base + "frq").c_str(), c.frequency);
     prefs.putInt((base + "min").c_str(), c.minUs);
@@ -281,7 +284,20 @@ static void persistServo(int idx) {
     prefs.putBool((base + "rev").c_str(), c.reverse);
     prefs.putFloat((base + "rate").c_str(), c.rate);
     prefs.putInt((base + "spd").c_str(), c.speed);
-    prefs.putInt("srv_count", servoCount);
+    
+    // New fields
+    prefs.putInt((base + "mode").c_str(), c.mode);
+    prefs.putInt((base + "angMin").c_str(), c.minAngle);
+    prefs.putInt((base + "angMax").c_str(), c.maxAngle);
+    
+    prefs.putInt((base + "rngCnt").c_str(), c.rangeCount);
+    for (int r = 0; r < c.rangeCount; r++) {
+        String rBase = base + "r" + String(r) + "_";
+        prefs.putInt((rBase + "min").c_str(), c.ranges[r].minIn);
+        prefs.putInt((rBase + "max").c_str(), c.ranges[r].maxIn);
+        prefs.putInt((rBase + "tgt").c_str(), c.ranges[r].targetUs);
+    }
+    
     prefs.end();
 }
 
@@ -335,18 +351,23 @@ static void setPinModeCommand(String cmd) {
 void reportServoConfigs() {
     for (int i = 0; i < servoCount; i++) {
         ServoConfig &c = servoConfigs[i];
-        Serial.printf("SERVO_CFG,%d,%d,%d,%d,%d,%d,%d,%.2f,%d\n",
+        Serial.printf("SERVO_CFG,%d,%d,%d,%d,%d,%d,%d,%.2f,%d,%d,%d,%d\n",
             c.pin, c.frequency, c.minUs, c.midUs, c.maxUs,
-            c.sourceChannel, c.reverse ? 1 : 0, c.rate, c.speed);
+            c.sourceChannel, c.reverse ? 1 : 0, c.rate, c.speed,
+            c.mode, c.minAngle, c.maxAngle);
+        // Report ranges if present
+        for(int r=0; r<c.rangeCount; r++) {
+            Serial.printf("SERVO_RNG,%d,%d,%d,%d,%d\n", c.pin, r, c.ranges[r].minIn, c.ranges[r].maxIn, c.ranges[r].targetUs);
+        }
     }
 }
 
 void setServoConfigCommand(String cmd) {
-    // Format: SET_SERVO_CFG:pin:freq:min:mid:max:src:rev:rate:speed
-    String parts[12];
+    // Format: SET_SERVO_CFG:pin:freq:min:mid:max:src:rev:rate:speed:mode:minAngle:maxAngle
+    String parts[16]; // Increased size for new fields
     int count = 0;
     int lastPos = 0;
-    for (int i = 0; i < 12; i++) {
+    for (int i = 0; i < 16; i++) {
         int nextPos = cmd.indexOf(':', lastPos);
         if (nextPos == -1) {
             parts[i] = cmd.substring(lastPos);
@@ -359,7 +380,7 @@ void setServoConfigCommand(String cmd) {
     }
 
     if (count < 10) {
-        Serial.println("!! ERR: Invalid servo config (need 10 fields)");
+        Serial.println("!! ERR: Invalid servo config (need at least 10 fields)");
         return;
     }
 
@@ -390,6 +411,18 @@ void setServoConfigCommand(String cmd) {
     c.reverse = parts[7].toInt() == 1;
     c.rate = parts[8].toFloat();
     c.speed = parts[9].toInt();
+    
+    // New fields (optional for backward compatibility)
+    if (count >= 13) {
+        c.mode = parts[10].toInt();
+        c.minAngle = parts[11].toInt();
+        c.maxAngle = parts[12].toInt();
+    } else {
+        // Defaults if old format
+        c.mode = 0;
+        c.minAngle = 0;
+        c.maxAngle = 180;
+    }
 
     if (c.frequency < 10) c.frequency = 50;
     if (c.minUs < 500) c.minUs = 500;
@@ -400,6 +433,8 @@ void setServoConfigCommand(String cmd) {
     if (c.sourceChannel > 16) c.sourceChannel = 16;
     if (c.rate <= 0.0f) c.rate = 1.0f;
     if (c.speed < 0) c.speed = 0;
+    if (c.minAngle < -360) c.minAngle = 0;
+    if (c.maxAngle > 360) c.maxAngle = 180;
 
     c.currentUs = (float)c.midUs;
     c.lastWrittenUs = 0; // Force rewrite
@@ -411,10 +446,51 @@ void setServoConfigCommand(String cmd) {
 
     persistServo(idx);
     applyPinRuntime(pin, 2, 0);
-    Serial.printf("SERVO_CFG,%d,%d,%d,%d,%d,%d,%d,%.2f,%d\n",
-        c.pin, c.frequency, c.minUs, c.midUs, c.maxUs,
-        c.sourceChannel, c.reverse ? 1 : 0, c.rate, c.speed);
-    Serial.printf(">> OK: Servo config saved for pin %d\n", pin);
+    // Reporting is handled inside persistServo now (to include ranges)
+}
+
+void setServoRangeCommand(String cmd) {
+    // Format: SET_SERVO_RNG:pin:idx:minIn:maxIn:targetUs
+    int c1 = cmd.indexOf(':');
+    int c2 = cmd.indexOf(':', c1 + 1);
+    int c3 = cmd.indexOf(':', c2 + 1);
+    int c4 = cmd.indexOf(':', c3 + 1);
+    int c5 = cmd.indexOf(':', c4 + 1);
+    
+    if (c5 == -1) {
+        Serial.println("!! ERR: Invalid SET_SERVO_RNG format");
+        return;
+    }
+
+    int pin = cmd.substring(c1 + 1, c2).toInt();
+    int idx = cmd.substring(c2 + 1, c3).toInt();
+    int minIn = cmd.substring(c3 + 1, c4).toInt();
+    int maxIn = cmd.substring(c4 + 1, c5).toInt();
+    int targetUs = cmd.substring(c5 + 1).toInt();
+
+    int sIdx = findServoIdx(pin);
+    if (sIdx == -1) {
+        Serial.println("!! ERR: Servo not found");
+        return;
+    }
+    
+    ServoConfig &c = servoConfigs[sIdx];
+    if (idx < 0 || idx >= 5) {
+         Serial.println("!! ERR: Range index out of bounds (0-4)");
+         return;
+    }
+    
+    // Update range
+    c.ranges[idx].minIn = minIn;
+    c.ranges[idx].maxIn = maxIn;
+    c.ranges[idx].targetUs = targetUs;
+    
+    // Update count if expanding
+    if (idx >= c.rangeCount) c.rangeCount = idx + 1;
+    
+    // Persist
+    persistServo(sIdx);
+    Serial.printf(">> OK: Range %d updated for servo %d\n", idx, pin);
 }
 
 // Deklaracje funkcji z gps_logic.ino
@@ -625,19 +701,82 @@ void processCommand(String cmd) {
         Serial.println(">> All UARTs enabled");
     }
     else if (cmd == "ENABLE_RECEIVER_MODE") {
-        int rx = -1, tx = -1;
-        if (u1_type == "RECEIVER" && u1_enabled) { rx = u1_rx; tx = u1_tx; Serial1.end(); }
-        else if (u2_type == "RECEIVER" && u2_enabled) { rx = u2_rx; tx = u2_tx; Serial2.end(); }
-        else if (u3_type == "RECEIVER" && u3_enabled) { rx = u3_rx; tx = u3_tx; Serial3.end(); }
-        if (rx == -1) {
-             Serial.println(">> INFO: Nie znaleziono UART typu RECEIVER, uzywam domyslnego UART1");
-             if (u1_enabled) Serial1.end();
-             rx = u1_rx; tx = u1_tx;
+        // Sprawdzamy czy UART1 jest zajęty i NIE jest Receiverem
+        if (u1_enabled && u1_type != "RECEIVER") {
+            // Próbujemy przenieść konfigurację UART1 na wolny port (U2 lub U3)
+            int targetPort = -1;
+            if (!u2_enabled) targetPort = 2;
+            else if (!u3_enabled) targetPort = 3;
+
+            if (targetPort != -1) {
+                // Przenosimy ustawienia
+                long newBaud = u1_baud;
+                if (newBaud > 115200) newBaud = 115200; // Limit dla SoftwareSerial
+
+                if (targetPort == 2) {
+                    saveEnabled("u2_en", true, u2_enabled);
+                    // Zapisujemy typ i baudrate dla U2 (kopiujemy z U1)
+                    prefs.begin("sys_config", false);
+                    prefs.putString("u2_type", u1_type);
+                    prefs.putLong("u2_baud", newBaud);
+                    prefs.end();
+                    u2_type = u1_type;
+                    u2_baud = newBaud;
+                    restartUART2();
+                    Serial.printf(">> MOVED UART1 config to UART2 (Baud: %ld)\n", newBaud);
+                } else {
+                    saveEnabled("u3_en", true, u3_enabled);
+                    // Zapisujemy typ i baudrate dla U3
+                    prefs.begin("sys_config", false);
+                    prefs.putString("u3_type", u1_type);
+                    prefs.putLong("u3_baud", newBaud);
+                    prefs.end();
+                    u3_type = u1_type;
+                    u3_baud = newBaud;
+                    restartUART3();
+                    Serial.printf(">> MOVED UART1 config to UART3 (Baud: %ld)\n", newBaud);
+                }
+            } else {
+                Serial.println(">> WARN: No free UART to move existing UART1 config!");
+            }
         }
+
+        // Konfigurujemy UART1 jako Receiver (CRSF)
+        int rx = u1_rx; 
+        int tx = u1_tx;
+        
+        // Jeśli piny są nieprawidłowe (-1), przywracamy domyślne dla U1 (4/5) lub inne znane
+        if (rx == -1 || tx == -1) {
+             rx = 4; tx = 5; // Domyślne dla U1 w tym projekcie (z configu)
+             // Zapisujemy je
+             savePin("u1_rx", rx, u1_rx);
+             savePin("u1_tx", tx, u1_tx);
+        }
+
+        // Wymuszamy typ RECEIVER na U1
+        prefs.begin("sys_config", false);
+        prefs.putString("u1_type", "RECEIVER");
+        prefs.putLong("u1_baud", 420000); // CRSF baud
+        prefs.end();
+        u1_type = "RECEIVER";
+        u1_baud = 420000;
+        
+        saveEnabled("u1_en", true, u1_enabled);
+
+        // Restartujemy Serial1 (jeśli był włączony jako inny typ, to teraz będzie CRSF)
+        Serial1.end(); 
+        // Uwaga: CRSF używa HardwareSerial, ale biblioteka AlfredoCRSF może chcieć surowy Stream.
+        // Tutaj używamy crsfSerial (HardwareSerial(1)) oddzielnie od Serial1.
+        // Musimy upewnić się, że Serial1 nie blokuje pinów.
+        // W implementacji 'setup' Serial1.begin jest wołany. 
+        // Tutaj w 'handleReceiverLoop' używamy 'crsfSerial'.
+        // Konflikt: HardwareSerial(1) to to samo co Serial1.
+        // Więc musimy wyłączyć Serial1, aby crsfSerial mógł przejąć kontrolę.
+        
         crsfSerial.begin(420000, SERIAL_8N1, rx, tx);
         crsf.begin(crsfSerial);
         receiverMode = true;
-        Serial.printf(">> Receiver Mode ENABLED (ELRS 420k @ RX:%d/TX:%d)\n", rx, tx);
+        Serial.printf(">> Receiver Mode ENABLED on UART1 (ELRS 420k @ RX:%d/TX:%d)\n", rx, tx);
     }
     else if (cmd == "DISABLE_RECEIVER_MODE") {
         receiverMode = false;
@@ -743,7 +882,7 @@ void processCommand(String cmd) {
 
         // Write immediately
         uint32_t periodUs = 1000000UL / sc.frequency;
-        uint32_t duty = (uint32_t)(((uint32_t)us * 65535ULL) / periodUs);
+        uint32_t duty = (uint32_t)(((uint32_t)us * 4095ULL) / periodUs);
         ledcWrite(pin, duty);
         sc.lastWrittenUs = us;
 

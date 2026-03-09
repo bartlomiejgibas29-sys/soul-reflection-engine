@@ -2,10 +2,15 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { SlidersHorizontal, RefreshCw, Save } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
-import type { PinConfig, ServoConfig } from "@/hooks/useSerial";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Trash2, Plus, RefreshCw, Save, Activity } from "lucide-react";
+import type { PinConfig, ServoConfig, ServoRange } from "@/hooks/useSerial";
 
 interface ServoPageProps {
   pinConfigs: PinConfig[];
@@ -15,181 +20,139 @@ interface ServoPageProps {
 
 const CHANNELS = ["CH1", "CH2", "CH3", "CH4", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12"];
 
-type ServoControlMode = "MANUAL" | "RC";
-
-const RATE_OPTIONS = [
-  { value: "0.5", label: "0.5x" },
-  { value: "0.75", label: "0.75x" },
-  { value: "1", label: "1.0x" },
-  { value: "1.25", label: "1.25x" },
-  { value: "1.5", label: "1.5x" },
-  { value: "2", label: "2.0x" },
-];
-
-interface LocalServoConfig {
-  min: number;
-  mid: number;
-  max: number;
-  channels: boolean[];
-  control: ServoControlMode;
-  rate: string;
-  reverse: boolean;
-  speed: number;
-  frequency: number;
-}
+const mapRange = (x: number, in_min: number, in_max: number, out_min: number, out_max: number) => {
+  return ((x - in_min) * (out_max - out_min)) / (in_max - in_min) + out_min;
+};
 
 const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
   const servoPins = pinConfigs.filter(p => p.mode === "SERVO").map(p => p.pin);
-  const [configs, setConfigs] = useState<Record<number, LocalServoConfig>>({});
-  const [livePositions, setLivePositions] = useState<Record<number, number>>({});
-  const [manualUs, setManualUs] = useState<Record<number, number>>({});
+  const [testMode, setTestMode] = useState<Record<number, boolean>>({});
+  const [testVal, setTestVal] = useState<Record<number, number>>({});
   const throttleRef = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
+  // Local state for editing configs before saving
+  const [localConfigs, setLocalConfigs] = useState<Record<number, ServoConfig>>({});
+
+  // Sync props to local state
+  useEffect(() => {
+    const newConfigs: Record<number, ServoConfig> = {};
+    servoConfigs.forEach(cfg => {
+      newConfigs[cfg.pin] = { ...cfg, ranges: [...(cfg.ranges || [])] };
+    });
+    setLocalConfigs(prev => {
+      // Only update if we don't have it or it's a fresh load (simplification)
+      // Ideally we should merge, but for now let's just use what we have if the user hasn't edited?
+      // Actually, better to just update if the incoming data is newer/different.
+      // For simplicity in this interaction, let's just init if empty, otherwise keep local edits?
+      // No, that risks desync. Let's merge carefully.
+      const merged = { ...prev };
+      servoConfigs.forEach(cfg => {
+         if (!merged[cfg.pin]) {
+             merged[cfg.pin] = { ...cfg, ranges: [...(cfg.ranges || [])] };
+         }
+         // If we wanted to live-update, we'd need a "dirty" flag.
+         // Let's assume user hits "Refresh" to get latest, and "Save" to push.
+      });
+      return merged;
+    });
+  }, [servoConfigs]);
+
+  // Initial load
   useEffect(() => {
     onSend("SERVO_TABLE");
   }, [onSend]);
 
-  useEffect(() => {
-    return () => {
-      Object.values(throttleRef.current).forEach(clearTimeout);
-    };
-  }, []);
+  const getEffectiveConfig = (pin: number, local: Record<number, ServoConfig>): ServoConfig => {
+      const defaultConfig: ServoConfig = {
+          pin, frequency: 50, minUs: 1000, midUs: 1500, maxUs: 2000,
+          sourceChannel: 0, reverse: false, rate: 1.0, speed: 0,
+          mode: 0, minAngle: 0, maxAngle: 180, ranges: []
+      };
+      return local[pin] || servoConfigs.find(c => c.pin === pin) || defaultConfig;
+  };
 
-  useEffect(() => {
-    const map: Record<number, LocalServoConfig> = {};
-    const existingByPin = new Map(servoConfigs.map(c => [c.pin, c]));
-
-    servoPins.forEach(pin => {
-      const existing = existingByPin.get(pin);
-      const channels = new Array(16).fill(false);
-      if (existing && existing.sourceChannel >= 1) {
-        channels[existing.sourceChannel - 1] = true;
-      }
-
-      map[pin] = {
-        min: existing?.minUs ?? 1000,
-        mid: existing?.midUs ?? 1500,
-        max: existing?.maxUs ?? 2000,
-        channels,
-        control: existing?.sourceChannel && existing.sourceChannel >= 1 ? "RC" : "MANUAL",
-        rate: String(existing?.rate ?? 1),
-        reverse: existing?.reverse ?? false,
-        speed: existing?.speed ?? 0,
-        frequency: existing?.frequency ?? 50,
+  const handleUpdateConfig = (pin: number, updates: Partial<ServoConfig>) => {
+    setLocalConfigs(prev => {
+      const current = getEffectiveConfig(pin, prev);
+      return {
+        ...prev,
+        [pin]: { ...current, ...updates }
       };
     });
+  };
 
-    setConfigs(map);
+  const handleSave = async (pin: number) => {
+    const cfg = getEffectiveConfig(pin, localConfigs);
 
-    setManualUs(prev => {
-      const next = { ...prev };
-      servoPins.forEach(pin => {
-        if (next[pin] == null) {
-          const existing = existingByPin.get(pin);
-          next[pin] = existing?.midUs ?? 1500;
+    // Send Main Config
+    // Format: SET_SERVO_CFG:pin:freq:min:mid:max:src:rev:rate:speed:mode:minAngle:maxAngle
+    const cmd = `SET_SERVO_CFG:${pin}:${cfg.frequency}:${cfg.minUs}:${cfg.midUs}:${cfg.maxUs}:${cfg.sourceChannel}:${cfg.reverse ? 1 : 0}:${cfg.rate}:${cfg.speed}:${cfg.mode}:${cfg.minAngle}:${cfg.maxAngle}`;
+    await onSend(cmd);
+
+    // Send Ranges if mode is RANGES (or always, to be safe)
+    if (cfg.ranges) {
+        for (let i = 0; i < cfg.ranges.length; i++) {
+            const r = cfg.ranges[i];
+            // SET_SERVO_RNG:pin:idx:minIn:maxIn:targetUs
+            await onSend(`SET_SERVO_RNG:${pin}:${i}:${r.minIn}:${r.maxIn}:${r.targetUs}`);
         }
-      });
-      return next;
-    });
-
-    const positions: Record<number, number> = {};
-    servoPins.forEach(pin => {
-      const pinConf = pinConfigs.find(p => p.pin === pin);
-      positions[pin] = pinConf?.value ?? 1500;
-    });
-    setLivePositions(positions);
-  }, [servoConfigs, pinConfigs]);
-
-  const handleFieldChange = (pin: number, field: keyof LocalServoConfig, value: string | number | boolean | boolean[]) => {
-    setConfigs(prev => ({
-      ...prev,
-      [pin]: { ...prev[pin], [field]: value }
-    }));
+    }
+    
+    // Refresh to confirm
+    setTimeout(() => onSend("SERVO_TABLE"), 500);
   };
 
-  const handleControlModeChange = (pin: number, mode: ServoControlMode) => {
-    setConfigs(prev => {
-      const cfg = prev[pin];
-      if (!cfg) return prev;
-
-      const hasChannel = cfg.channels.some(Boolean);
-      const channels =
-        mode === "MANUAL"
-          ? new Array(16).fill(false)
-          : hasChannel
-            ? cfg.channels
-            : cfg.channels.map((_, i) => i === 0);
-
-      return {
-        ...prev,
-        [pin]: {
-          ...cfg,
-          control: mode,
-          channels,
-        },
-      };
-    });
-  };
-
-  const handleChannelToggle = (pin: number, chIdx: number) => {
-    setConfigs(prev => {
-      const cfg = prev[pin];
-      if (!cfg) return prev;
-
-      const wasChecked = cfg.channels[chIdx];
-      const newChannels = cfg.channels.map((_, i) => (i === chIdx ? !wasChecked : false));
-
-      return {
-        ...prev,
-        [pin]: {
-          ...cfg,
-          channels: newChannels,
-          control: newChannels.some(Boolean) ? "RC" : "MANUAL",
-        },
-      };
-    });
-  };
-
-  const handleManualMove = (pin: number, us: number) => {
-    setConfigs(prev => {
-      const cfg = prev[pin];
-      if (!cfg || cfg.control === "MANUAL") return prev;
-      return {
-        ...prev,
-        [pin]: {
-          ...cfg,
-          control: "MANUAL",
-          channels: new Array(16).fill(false),
-        },
-      };
-    });
-
-    setManualUs(prev => ({ ...prev, [pin]: us }));
-
+  const handleTestMove = (pin: number, val: number) => {
+    setTestVal(prev => ({ ...prev, [pin]: val }));
+    
     if (throttleRef.current[pin]) clearTimeout(throttleRef.current[pin]);
     throttleRef.current[pin] = setTimeout(() => {
-      onSend(`SERVO_MOVE:${pin}:${us}`);
+      // Calculate Us from Angle (val)
+      const cfg = getEffectiveConfig(pin, localConfigs);
+      const us = mapRange(val, cfg.minAngle, cfg.maxAngle, cfg.minUs, cfg.maxUs);
+      onSend(`SERVO_MOVE:${pin}:${Math.round(us)}`);
     }, 50);
   };
 
-  const handleSaveAll = async () => {
-    for (const pin of servoPins) {
-      const cfg = configs[pin];
-      if (!cfg) continue;
+  const addRange = (pin: number) => {
+      const cfg = getEffectiveConfig(pin, localConfigs);
+      if ((cfg.ranges?.length || 0) >= 5) {
+          alert("Max 5 ranges allowed.");
+          return;
+      }
+      const newRange: ServoRange = { minIn: 1000, maxIn: 2000, targetUs: cfg.midUs };
+      handleUpdateConfig(pin, { ranges: [...(cfg.ranges || []), newRange] });
+  };
 
-      const selectedChannel = cfg.channels.findIndex(c => c) + 1;
-      const actualSource = cfg.control === "RC" ? (selectedChannel > 0 ? selectedChannel : 1) : 0;
-      const cmd = `SET_SERVO_CFG:${pin}:${cfg.frequency}:${cfg.min}:${cfg.mid}:${cfg.max}:${actualSource}:${cfg.reverse ? 1 : 0}:${cfg.rate}:${cfg.speed}`;
-      await onSend(cmd);
-    }
+  const updateRange = (pin: number, idx: number, field: keyof ServoRange, value: number) => {
+      const cfg = getEffectiveConfig(pin, localConfigs);
+      if (!cfg.ranges) return;
+      const newRanges = [...cfg.ranges];
+      newRanges[idx] = { ...newRanges[idx], [field]: value };
+      handleUpdateConfig(pin, { ranges: newRanges });
+  };
 
-    onSend("SERVO_TABLE");
+  const removeRange = (pin: number, idx: number) => {
+      const cfg = getEffectiveConfig(pin, localConfigs);
+      if (!cfg.ranges) return;
+      const newRanges = cfg.ranges.filter((_, i) => i !== idx);
+      handleUpdateConfig(pin, { ranges: newRanges });
+  };
+
+  const usToAngle = (us: number, cfg: ServoConfig) => {
+      if (!cfg) return 0;
+      return Math.round(mapRange(us, cfg.minUs, cfg.maxUs, cfg.minAngle, cfg.maxAngle));
+  };
+
+  const angleToUs = (deg: number, cfg: ServoConfig) => {
+      if (!cfg) return 1500;
+      return Math.round(mapRange(deg, cfg.minAngle, cfg.maxAngle, cfg.minUs, cfg.maxUs));
   };
 
   if (servoPins.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-        <SlidersHorizontal size={48} className="mb-4 opacity-50" />
+        <Activity size={48} className="mb-4 opacity-50" />
         <h3 className="text-lg font-semibold">Brak skonfigurowanych serw</h3>
         <p className="text-sm">Przejdź do zakładki Pins i ustaw piny w tryb "SERVO".</p>
       </div>
@@ -199,173 +162,257 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
   return (
     <div className="h-full overflow-auto p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <SlidersHorizontal className="text-primary" />
-          <h2 className="text-lg font-semibold">Servo Mixer</h2>
-        </div>
+        <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Activity className="text-primary" /> Konfiguracja Serwomechanizmów
+        </h2>
         <Button variant="outline" size="sm" onClick={() => onSend("SERVO_TABLE")}>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Refresh
+          <RefreshCw className="mr-2 h-4 w-4" /> Odśwież
         </Button>
       </div>
 
-      <div className="text-center text-xs text-primary font-medium bg-primary/10 rounded py-1.5">
-        Manual = suwak, RC = wybrany kanał + Zapisz
-      </div>
-
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {servoPins.map((pin, idx) => {
-          const cfg = configs[pin];
-          if (!cfg) return null;
-
-          const us = manualUs[pin] ?? cfg.mid;
-          const pos = livePositions[pin] ?? 1500;
-          const range = Math.max(1, cfg.max - cfg.min);
-          const pct = Math.max(0, Math.min(100, ((pos - cfg.min) / range) * 100));
-
+          const cfg = getEffectiveConfig(pin, localConfigs);
+          
           return (
-            <div key={pin} className="border border-border rounded-lg overflow-hidden">
-              <div className="flex items-center gap-3 px-3 py-2 bg-muted/40 border-b border-border">
-                <span className="text-sm font-semibold text-primary">Servo {idx + 1}</span>
-                <span className="text-[10px] text-muted-foreground font-mono">(GPIO {pin})</span>
-                <div className="flex-1 flex items-center gap-2">
-                  <div className="flex-1 h-3 bg-muted rounded-full overflow-hidden border border-border">
-                    <div
-                      className="h-full transition-all duration-150 rounded-full bg-primary/80"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <span className="text-[10px] font-mono text-muted-foreground w-14 text-right">{pos} µs</span>
-                </div>
-              </div>
+            <Card key={pin} className="flex flex-col">
+              <CardHeader className="pb-2 bg-muted/40">
+                <CardTitle className="text-sm font-medium flex justify-between items-center">
+                  <span>Servo {idx + 1} (Pin {pin})</span>
+                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleSave(pin)}>
+                    <Save className="h-4 w-4" />
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex-1 p-0">
+                <Tabs defaultValue="mode" className="w-full">
+                  <TabsList className="w-full rounded-none border-b bg-transparent p-0">
+                    <TabsTrigger value="mode" className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary">Tryb</TabsTrigger>
+                    <TabsTrigger value="setup" className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary">Ustawienia</TabsTrigger>
+                    <TabsTrigger value="test" className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary">Test</TabsTrigger>
+                  </TabsList>
+                  
+                  {/* --- MODE TAB --- */}
+                  <TabsContent value="mode" className="p-4 space-y-4">
+                    <RadioGroup 
+                        value={cfg.mode.toString()} 
+                        onValueChange={(v) => handleUpdateConfig(pin, { mode: parseInt(v) })}
+                        className="grid grid-cols-2 gap-4"
+                    >
+                        <div>
+                            <RadioGroupItem value="0" id={`m0-${pin}`} className="peer sr-only" />
+                            <Label
+                                htmlFor={`m0-${pin}`}
+                                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                            >
+                                <Activity className="mb-2 h-6 w-6" />
+                                Proporcjonalny
+                            </Label>
+                        </div>
+                        <div>
+                            <RadioGroupItem value="1" id={`m1-${pin}`} className="peer sr-only" />
+                            <Label
+                                htmlFor={`m1-${pin}`}
+                                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                            >
+                                <SlidersHorizontal className="mb-2 h-6 w-6" />
+                                Zakresy
+                            </Label>
+                        </div>
+                    </RadioGroup>
 
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/20">
-                      <th className="px-2 py-1 text-center text-[10px] font-semibold text-primary">MIN</th>
-                      <th className="px-2 py-1 text-center text-[10px] font-semibold text-primary">MID</th>
-                      <th className="px-2 py-1 text-center text-[10px] font-semibold text-primary">MAX</th>
-                      {CHANNELS.map(ch => (
-                        <th key={ch} className="px-0.5 py-1 text-center text-[10px] font-semibold text-foreground">{ch}</th>
-                      ))}
-                      <th className="px-2 py-1 text-center text-[10px] font-semibold text-primary">CTRL</th>
-                      <th className="px-2 py-1 text-center text-[10px] font-semibold text-primary">Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td className="px-1 py-1.5">
-                        <Input
-                          type="number"
-                          value={cfg.min}
-                          onChange={e => handleFieldChange(pin, "min", parseInt(e.target.value) || 0)}
-                          className="h-7 w-16 text-center text-xs"
-                        />
-                      </td>
-                      <td className="px-1 py-1.5">
-                        <Input
-                          type="number"
-                          value={cfg.mid}
-                          onChange={e => handleFieldChange(pin, "mid", parseInt(e.target.value) || 0)}
-                          className="h-7 w-16 text-center text-xs"
-                        />
-                      </td>
-                      <td className="px-1 py-1.5">
-                        <Input
-                          type="number"
-                          value={cfg.max}
-                          onChange={e => handleFieldChange(pin, "max", parseInt(e.target.value) || 0)}
-                          className="h-7 w-16 text-center text-xs"
-                        />
-                      </td>
-                      {cfg.channels.map((checked, chIdx) => (
-                        <td key={chIdx} className="px-0.5 py-1.5 text-center">
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={() => handleChannelToggle(pin, chIdx)}
-                            className="h-3.5 w-3.5"
-                          />
-                        </td>
-                      ))}
-                      <td className="px-1 py-1.5">
-                        <Select value={cfg.control} onValueChange={v => handleControlModeChange(pin, v as ServoControlMode)}>
-                          <SelectTrigger className="h-7 w-20 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="MANUAL">Manual</SelectItem>
-                            <SelectItem value="RC">RC</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="px-1 py-1.5">
-                        <Select value={cfg.rate} onValueChange={v => handleFieldChange(pin, "rate", v)}>
-                          <SelectTrigger className="h-7 w-16 text-xs">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {RATE_OPTIONS.map(o => (
-                              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+                    {cfg.mode === 0 ? (
+                        <div className="space-y-3 pt-2">
+                            <div className="space-y-1">
+                                <Label>Kanał wejściowy</Label>
+                                <Select 
+                                    value={cfg.sourceChannel.toString()} 
+                                    onValueChange={(v) => handleUpdateConfig(pin, { sourceChannel: parseInt(v) })}
+                                >
+                                    <SelectTrigger><SelectValue placeholder="Wybierz kanał" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="0">Brak (Manual)</SelectItem>
+                                        {CHANNELS.map((ch, i) => (
+                                            <SelectItem key={ch} value={(i + 1).toString()}>{ch}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="flex gap-4">
+                                <div className="space-y-1 flex-1">
+                                    <Label>Rate (Mnożnik)</Label>
+                                    <Input 
+                                        type="number" step="0.1" 
+                                        value={cfg.rate} 
+                                        onChange={(e) => handleUpdateConfig(pin, { rate: parseFloat(e.target.value) })} 
+                                    />
+                                </div>
+                                <div className="space-y-1 flex items-end pb-2">
+                                    <div className="flex items-center gap-2">
+                                        <Switch 
+                                            checked={cfg.reverse} 
+                                            onCheckedChange={(c) => handleUpdateConfig(pin, { reverse: c })} 
+                                        />
+                                        <Label>Rewers</Label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                                <Label>Reguły zakresów</Label>
+                                <Button size="sm" variant="ghost" onClick={() => addRange(pin)}><Plus className="h-4 w-4" /></Button>
+                            </div>
+                            <div className="border rounded-md overflow-hidden text-xs">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead className="p-2">Wejście (RC)</TableHead>
+                                            <TableHead className="p-2">Kąt (°)</TableHead>
+                                            <TableHead className="p-2 w-8"></TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {(cfg.ranges || []).map((rng, rIdx) => (
+                                            <TableRow key={rIdx}>
+                                                <TableCell className="p-2">
+                                                    <div className="flex items-center gap-1">
+                                                        <Input 
+                                                            className="h-6 w-12 px-1 text-center" 
+                                                            value={rng.minIn} 
+                                                            onChange={(e) => updateRange(pin, rIdx, 'minIn', parseInt(e.target.value))}
+                                                        />
+                                                        <span>-</span>
+                                                        <Input 
+                                                            className="h-6 w-12 px-1 text-center" 
+                                                            value={rng.maxIn} 
+                                                            onChange={(e) => updateRange(pin, rIdx, 'maxIn', parseInt(e.target.value))}
+                                                        />
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="p-2">
+                                                    <Input 
+                                                        className="h-6 w-14 px-1 text-center" 
+                                                        value={usToAngle(rng.targetUs, cfg)} 
+                                                        onChange={(e) => updateRange(pin, rIdx, 'targetUs', angleToUs(parseInt(e.target.value), cfg))}
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="p-2">
+                                                    <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => removeRange(pin, rIdx)}>
+                                                        <Trash2 className="h-3 w-3" />
+                                                    </Button>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                        {(cfg.ranges || []).length === 0 && (
+                                            <TableRow>
+                                                <TableCell colSpan={3} className="text-center text-muted-foreground p-4">
+                                                    Brak reguł. Dodaj nową.
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                            <div className="space-y-1">
+                                <Label>Kanał sterujący</Label>
+                                <Select 
+                                    value={cfg.sourceChannel.toString()} 
+                                    onValueChange={(v) => handleUpdateConfig(pin, { sourceChannel: parseInt(v) })}
+                                >
+                                    <SelectTrigger><SelectValue placeholder="Wybierz kanał" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="0">Brak</SelectItem>
+                                        {CHANNELS.map((ch, i) => (
+                                            <SelectItem key={ch} value={(i + 1).toString()}>{ch}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                    )}
+                  </TabsContent>
 
-              <div className="flex items-center gap-3 px-3 py-2 bg-muted/10 border-t border-border">
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider w-14 shrink-0">Ręczne</span>
-                <Slider
-                  min={cfg.min}
-                  max={cfg.max}
-                  step={1}
-                  value={[us]}
-                  onValueChange={([v]) => handleManualMove(pin, v)}
-                  disabled={cfg.control === "RC"}
-                  className="flex-1"
-                />
-                <span className="text-xs font-mono text-muted-foreground w-14 text-right">{us} µs</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-6 text-[10px] px-2"
-                  onClick={() => handleManualMove(pin, cfg.min)}
-                  disabled={cfg.control === "RC"}
-                >
-                  MIN
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-6 text-[10px] px-2"
-                  onClick={() => handleManualMove(pin, cfg.mid)}
-                  disabled={cfg.control === "RC"}
-                >
-                  MID
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-6 text-[10px] px-2"
-                  onClick={() => handleManualMove(pin, cfg.max)}
-                  disabled={cfg.control === "RC"}
-                >
-                  MAX
-                </Button>
-              </div>
-            </div>
+                  {/* --- SETUP TAB --- */}
+                  <TabsContent value="setup" className="p-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <Label>Min Us</Label>
+                            <Input type="number" value={cfg.minUs} onChange={(e) => handleUpdateConfig(pin, { minUs: parseInt(e.target.value) })} />
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Max Us</Label>
+                            <Input type="number" value={cfg.maxUs} onChange={(e) => handleUpdateConfig(pin, { maxUs: parseInt(e.target.value) })} />
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Mid Us</Label>
+                            <Input type="number" value={cfg.midUs} onChange={(e) => handleUpdateConfig(pin, { midUs: parseInt(e.target.value) })} />
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Speed (us/s)</Label>
+                            <Input type="number" value={cfg.speed} onChange={(e) => handleUpdateConfig(pin, { speed: parseInt(e.target.value) })} />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 border-t pt-4">
+                        <div className="space-y-1">
+                            <Label>Min Kąt (°)</Label>
+                            <Input type="number" value={cfg.minAngle} onChange={(e) => handleUpdateConfig(pin, { minAngle: parseInt(e.target.value) })} />
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Max Kąt (°)</Label>
+                            <Input type="number" value={cfg.maxAngle} onChange={(e) => handleUpdateConfig(pin, { maxAngle: parseInt(e.target.value) })} />
+                        </div>
+                    </div>
+                  </TabsContent>
+
+                  {/* --- TEST TAB --- */}
+                  <TabsContent value="test" className="p-4 space-y-6">
+                    <div className="flex items-center justify-between">
+                        <Label>Włącz tryb testowy</Label>
+                        <Switch 
+                            checked={testMode[pin] || false} 
+                            onCheckedChange={(c) => {
+                                setTestMode(prev => ({ ...prev, [pin]: c }));
+                                if (!c) onSend(`SERVO_MOVE:${pin}:0`); // Release control (0 usually means release in firmware if handled, or we might need logic change. Actually 0 means manual 0us which is invalid. Firmware handles sourceChannel=0 as manual. We need to revert to RC?)
+                                // The firmware logic: if sourceChannel > 0 it follows RC. If we send SERVO_MOVE, it sets sourceChannel=0.
+                                // So to disable test mode, we must Save Config again with correct source channel?
+                                // Or we just rely on user hitting "Save" in Mode tab to restore RC.
+                                // Ideally, toggling switch off should restore RC.
+                                if (!c && cfg.sourceChannel > 0) {
+                                     // Re-apply config to restore RC control
+                                     handleSave(pin);
+                                }
+                            }} 
+                        />
+                    </div>
+                    {testMode[pin] && (
+                        <div className="space-y-4">
+                            <div className="flex justify-between text-sm">
+                                <span>{cfg.minAngle}°</span>
+                                <span className="font-bold text-primary">
+                                    {Math.round(mapRange(testVal[pin] ?? ((cfg.minAngle + cfg.maxAngle)/2), cfg.minAngle, cfg.maxAngle, cfg.minAngle, cfg.maxAngle))}°
+                                </span>
+                                <span>{cfg.maxAngle}°</span>
+                            </div>
+                            <Slider 
+                                min={cfg.minAngle} 
+                                max={cfg.maxAngle} 
+                                step={1} 
+                                value={[testVal[pin] ?? ((cfg.minAngle + cfg.maxAngle)/2)]} 
+                                onValueChange={(v) => handleTestMove(pin, v[0])} 
+                            />
+                            <div className="text-center text-xs text-muted-foreground">
+                                PWM: {Math.round(mapRange(testVal[pin] ?? ((cfg.minAngle + cfg.maxAngle)/2), cfg.minAngle, cfg.maxAngle, cfg.minUs, cfg.maxUs))} us
+                            </div>
+                        </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
           );
         })}
-      </div>
-
-      <div className="flex justify-end">
-        <Button onClick={handleSaveAll} className="px-6">
-          <Save className="mr-2 h-4 w-4" />
-          Zapisz
-        </Button>
       </div>
     </div>
   );

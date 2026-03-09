@@ -76,7 +76,13 @@ struct SatInfo {
 extern SatInfo satInfos[MAX_SAT_COUNT];
 extern uint8_t satCount;
 
-// --- Servo Configuration (Betaflight-style) ---
+struct ServoRange {
+    int minIn;    // e.g. 900
+    int maxIn;    // e.g. 1100
+    int targetUs; // e.g. 1500
+};
+
+// --- Servo Configuration (Betaflight-style + Ranges) ---
 struct ServoConfig {
     int pin;
     int frequency;      // PWM frequency (Hz), typically 50
@@ -89,6 +95,11 @@ struct ServoConfig {
     int speed;           // Speed limit (us/sec, 0=instant)
     float currentUs;     // Current position in microseconds (runtime)
     int lastWrittenUs;   // Last written value to avoid redundant writes
+    int mode;            // 0=PROPORTIONAL, 1=RANGES
+    ServoRange ranges[5]; // Up to 5 ranges per servo
+    int rangeCount;      // Number of active ranges
+    int minAngle;        // e.g. 0
+    int maxAngle;        // e.g. 180
 };
 #define MAX_SERVOS 6
 extern ServoConfig servoConfigs[MAX_SERVOS];
@@ -97,6 +108,7 @@ extern int servoCount;
 // --- Pin configuration ---
 void initPinConfig();
 void reportAllPins();
+void reportServoConfigs(); // Added declaration
 int findServoIdx(int pin);
 
 #endif

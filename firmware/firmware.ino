@@ -129,6 +129,20 @@ void loadSettings() {
         servoConfigs[i].reverse = prefs.getBool((base + "rev").c_str(), false);
         servoConfigs[i].rate = prefs.getFloat((base + "rate").c_str(), 1.0f);
         servoConfigs[i].speed = prefs.getInt((base + "spd").c_str(), 0);
+        servoConfigs[i].mode = prefs.getInt((base + "mode").c_str(), 0);
+        servoConfigs[i].minAngle = prefs.getInt((base + "angMin").c_str(), 0);
+        servoConfigs[i].maxAngle = prefs.getInt((base + "angMax").c_str(), 180);
+        
+        // Load ranges
+        servoConfigs[i].rangeCount = prefs.getInt((base + "rngCnt").c_str(), 0);
+        if (servoConfigs[i].rangeCount > 5) servoConfigs[i].rangeCount = 5;
+        for (int r = 0; r < servoConfigs[i].rangeCount; r++) {
+            String rBase = base + "r" + String(r) + "_";
+            servoConfigs[i].ranges[r].minIn = prefs.getInt((rBase + "min").c_str(), 0);
+            servoConfigs[i].ranges[r].maxIn = prefs.getInt((rBase + "max").c_str(), 0);
+            servoConfigs[i].ranges[r].targetUs = prefs.getInt((rBase + "tgt").c_str(), 1500);
+        }
+
         servoConfigs[i].currentUs = (float)servoConfigs[i].midUs;
         servoConfigs[i].lastWrittenUs = 0;
     }
