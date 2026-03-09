@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Trash2, Plus, RefreshCw, Save, Activity } from "lucide-react";
+import { Trash2, Plus, RefreshCw, Save, Activity, SlidersHorizontal } from "lucide-react";
 import type { PinConfig, ServoConfig, ServoRange } from "@/hooks/useSerial";
 
 interface ServoPageProps {
