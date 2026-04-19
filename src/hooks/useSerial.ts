@@ -460,6 +460,11 @@ export function useSerial() {
   }, []);
 
   const send = useCallback(async (data: string) => {
+    if (simulatorRef.current) {
+      setLastSent(`TX: ${data}`);
+      setLogs(prev => [...prev.slice(-1999), `> ${data}\n`]);
+      return;
+    }
     if (!portRef.current || !portRef.current.writable) return;
     writeChainRef.current = writeChainRef.current.then(async () => {
       let writer: any = null;
