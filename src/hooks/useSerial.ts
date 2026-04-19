@@ -121,7 +121,9 @@ export function useSerial() {
   const [receiverSettings, setReceiverSettings] = useState<ReceiverSettings | null>(null);
   const [gpsSettings, setGpsSettings] = useState<GpsSettings | null>(null);
   const [pendingSatCount, setPendingSatCount] = useState<number>(0);
+  const [simulator, setSimulator] = useState(false);
   const pendingSatsRef = useRef<GpsSatellite[]>([]);
+  const simulatorRef = useRef(false);
   
   const portRef = useRef<any>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
