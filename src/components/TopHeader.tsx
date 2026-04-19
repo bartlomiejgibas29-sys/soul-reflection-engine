@@ -51,6 +51,11 @@ const TopHeader = ({ connected, simulator, deviceInfo, onConnect, onConnectSimul
             {deviceInfo.target && <div>Target: {deviceInfo.target}</div>}
           </div>
         )}
+        {connected && simulator && (
+          <span className="ml-2 px-2 py-0.5 rounded-sm bg-primary/15 text-primary text-[10px] font-bold tracking-wider uppercase border border-primary/30">
+            Simulator
+          </span>
+        )}
         {!connected && (
           <div className="text-xs text-muted-foreground">Not connected</div>
         )}
