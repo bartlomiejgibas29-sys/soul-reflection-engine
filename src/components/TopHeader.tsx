@@ -1,4 +1,4 @@
-import { Usb, Unplug, Rocket } from "lucide-react";
+import { Usb, Unplug, Rocket, Cpu } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   Select,
@@ -11,12 +11,14 @@ import { Switch } from "@/components/ui/switch";
 
 interface TopHeaderProps {
   connected: boolean;
+  simulator?: boolean;
   deviceInfo: { configurator?: string; firmware?: string; target?: string } | null;
   onConnect: (baudRate: number) => void;
+  onConnectSimulator?: () => void;
   onDisconnect: () => void;
 }
 
-const TopHeader = ({ connected, deviceInfo, onConnect, onDisconnect }: TopHeaderProps) => {
+const TopHeader = ({ connected, simulator, deviceInfo, onConnect, onConnectSimulator, onDisconnect }: TopHeaderProps) => {
   const [baudRate, setBaudRate] = useState("115200");
   const [autoConnect, setAutoConnect] = useState(false);
 
