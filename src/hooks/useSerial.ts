@@ -121,7 +121,9 @@ export function useSerial() {
   const [receiverSettings, setReceiverSettings] = useState<ReceiverSettings | null>(null);
   const [gpsSettings, setGpsSettings] = useState<GpsSettings | null>(null);
   const [pendingSatCount, setPendingSatCount] = useState<number>(0);
+  const [simulator, setSimulator] = useState(false);
   const pendingSatsRef = useRef<GpsSatellite[]>([]);
+  const simulatorRef = useRef(false);
   
   const portRef = useRef<any>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
@@ -458,6 +460,11 @@ export function useSerial() {
   }, []);
 
   const send = useCallback(async (data: string) => {
+    if (simulatorRef.current) {
+      setLastSent(`TX: ${data}`);
+      setLogs(prev => [...prev.slice(-1999), `> ${data}\n`]);
+      return;
+    }
     if (!portRef.current || !portRef.current.writable) return;
     writeChainRef.current = writeChainRef.current.then(async () => {
       let writer: any = null;
@@ -528,6 +535,22 @@ export function useSerial() {
   }, [parseBoardResponse]);
 
   const disconnect = useCallback(async () => {
+    if (simulatorRef.current) {
+      simulatorRef.current = false;
+      setSimulator(false);
+      setConnected(false);
+      setDeviceInfo(null);
+      setUartConfigs([]);
+      setPinConfigs([]);
+      setServoConfigs([]);
+      setReceiverData(null);
+      setReceiverSettings(null);
+      setGpsData(null);
+      setGpsSettings(null);
+      setLastSent("Simulator stopped");
+      setLogs(prev => [...prev, `[Simulator] Stopped\n`]);
+      return;
+    }
     try {
       console.log("Rozłączanie...");
       
@@ -563,6 +586,106 @@ export function useSerial() {
     bufferRef.current = "";
     writeChainRef.current = Promise.resolve();
   }, []);
+
+  const connectSimulator = useCallback(() => {
+    simulatorRef.current = true;
+    setSimulator(true);
+    setConnected(true);
+    setDeviceInfo({ configurator: "1.0.0", firmware: "SIM-1.0.0", target: "esp32c3-sim" });
+    setLastSent("Simulator started");
+    setLogs(prev => [...prev, `[Simulator] Virtual device connected\n`]);
+
+    setUartConfigs([
+      { id: 1, enabled: true, rx: 4, tx: 5, baudrate: 420000, type: "RECEIVER" },
+      { id: 2, enabled: true, rx: 6, tx: 7, baudrate: 9600, type: "GPS" },
+      { id: 3, enabled: false, rx: -1, tx: -1, baudrate: 9600, type: "GENERIC" },
+    ]);
+
+    setPinConfigs([
+      { pin: 0, mode: "DISABLED", value: 0 },
+      { pin: 1, mode: "LIGHT", value: 0 },
+      { pin: 2, mode: "SERVO", value: 1500 },
+      { pin: 3, mode: "STEERING", value: 1500 },
+      { pin: 8, mode: "DISABLED", value: 0 },
+      { pin: 9, mode: "DISABLED", value: 0 },
+      { pin: 10, mode: "SERVO", value: 1500 },
+    ]);
+
+    setServoConfigs([
+      { pin: 2, frequency: 50, minUs: 1000, midUs: 1500, maxUs: 2000, sourceChannel: 1, reverse: false, rate: 1.0, speed: 0, mode: 0, minAngle: 0, maxAngle: 180, ranges: [] },
+      { pin: 3, frequency: 50, minUs: 1000, midUs: 1500, maxUs: 2000, sourceChannel: 2, reverse: false, rate: 1.0, speed: 0, mode: 0, minAngle: 0, maxAngle: 180, ranges: [] },
+      { pin: 10, frequency: 50, minUs: 1000, midUs: 1500, maxUs: 2000, sourceChannel: 3, reverse: false, rate: 1.0, speed: 0, mode: 0, minAngle: 0, maxAngle: 180, ranges: [] },
+    ]);
+
+    setReceiverSettings({
+      controlMode: "PROPORTIONAL",
+      directionChannel: 1,
+      speedChannel: 2,
+      directionPressedIsReverse: false,
+      channelMap: "AETR1234",
+      rcMin: 1000,
+      rcMid: 1500,
+      rcMax: 2000,
+      deadbandRc: 0,
+      deadbandYaw: 0,
+      deadbandThr3d: 0,
+      rcSmoothing: true,
+      rcSmoothingCoeff: 30,
+      steeringChannel: 1,
+      throttleChannel: 2,
+      steeringRev: false,
+      throttleRev: false,
+    });
+
+    setGpsSettings({
+      protocol: "UBLOX",
+      autoConfig: true,
+      useGalileo: true,
+      setHomeOnce: true,
+      groundAssistance: "AUTO",
+      declination: 5.5,
+    });
+
+    setGpsData({
+      fix: true,
+      numSatellites: 11,
+      altitude: 218.4,
+      speed: 0,
+      headingImu: 0,
+      headingGps: 92.5,
+      latitude: 52.2297,
+      longitude: 21.0122,
+      distToHome: 0,
+      dop: 0.9,
+      satellites: Array.from({ length: 11 }).map((_, i) => {
+        const satId = i < 7 ? i + 1 : (i < 10 ? i + 58 : i + 91);
+        const gnssId = satId <= 32 ? "GPS" : (satId <= 88 ? "GLO" : "GAL");
+        const used = i < 9;
+        return {
+          gnssId,
+          satId,
+          signalStrength: 45 - i * 2,
+          status: (used ? "used" : "unused") as "used" | "unused",
+          quality: (used ? "fully locked" : "searching") as GpsSatellite["quality"],
+        };
+      }),
+    });
+
+    setReceiverData({
+      channels: [1500, 1500, 1000, 1500, 1000, 2000, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500],
+      uplinkRSS1: -65,
+      uplinkRSS2: -68,
+      uplinkLQ: 100,
+      uplinkSNR: 12,
+      activeAntenna: 1,
+      rfMode: 2,
+      uplinkTXPower: 100,
+      downlinkRSSI: -70,
+      downlinkLQ: 99,
+      downlinkSNR: 10,
+    });
+  }, []);
+
 
   const connect = useCallback(async (baudRate: number = 115200) => {
     const openPortWithTimeout = (port: any, timeoutMs: number) =>
@@ -692,6 +815,7 @@ export function useSerial() {
 
   return {
     connected,
+    simulator,
     deviceInfo,
     lastSent,
     uartConfigs,
@@ -703,6 +827,7 @@ export function useSerial() {
     gpsSettings,
     servoConfigs,
     connect,
+    connectSimulator,
     disconnect,
     send,
     reboot

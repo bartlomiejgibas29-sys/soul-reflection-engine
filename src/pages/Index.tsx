@@ -20,7 +20,7 @@ const Index = () => {
       return "Setup";
     }
   });
-  const { connected, deviceInfo, lastSent, uartConfigs, pinConfigs, servoConfigs, receiverData, receiverSettings, gpsData, gpsSettings, logs, connect, disconnect, send, reboot } = useSerial();
+  const { connected, simulator, deviceInfo, lastSent, uartConfigs, pinConfigs, servoConfigs, receiverData, receiverSettings, gpsData, gpsSettings, logs, connect, connectSimulator, disconnect, send, reboot } = useSerial();
 
   useEffect(() => {
     if (!connected) {
@@ -66,8 +66,10 @@ const Index = () => {
     <div className="flex flex-col h-screen overflow-hidden">
       <TopHeader
         connected={connected}
+        simulator={simulator}
         deviceInfo={deviceInfo}
         onConnect={connect}
+        onConnectSimulator={connectSimulator}
         onDisconnect={disconnect}
       />
       
