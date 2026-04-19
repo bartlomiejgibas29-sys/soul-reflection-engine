@@ -98,15 +98,29 @@ const TopHeader = ({ connected, simulator, deviceInfo, onConnect, onConnectSimul
             <span className="text-[10px]">Disconnect</span>
           </button>
         ) : (
-          <button
-            onClick={() => onConnect(parseInt(baudRate))}
-            className="flex flex-col items-center text-primary hover:text-primary/80 transition-colors"
-          >
-            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-              <Usb size={16} className="text-primary-foreground" />
-            </div>
-            <span className="text-[10px]">Connect</span>
-          </button>
+          <>
+            <button
+              onClick={() => onConnect(parseInt(baudRate))}
+              className="flex flex-col items-center text-primary hover:text-primary/80 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+                <Usb size={16} className="text-primary-foreground" />
+              </div>
+              <span className="text-[10px]">Connect</span>
+            </button>
+            {onConnectSimulator && (
+              <button
+                onClick={onConnectSimulator}
+                title="Start virtual device (no hardware required)"
+                className="flex flex-col items-center text-foreground hover:text-primary transition-colors"
+              >
+                <div className="w-8 h-8 rounded-full bg-secondary border border-border flex items-center justify-center">
+                  <Cpu size={16} className="text-foreground" />
+                </div>
+                <span className="text-[10px]">Simulator</span>
+              </button>
+            )}
+          </>
         )}
       </div>
     </header>
