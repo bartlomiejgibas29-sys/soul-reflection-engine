@@ -815,6 +815,7 @@ export function useSerial() {
 
   return {
     connected,
+    simulator,
     deviceInfo,
     lastSent,
     uartConfigs,
@@ -826,6 +827,7 @@ export function useSerial() {
     gpsSettings,
     servoConfigs,
     connect,
+    connectSimulator,
     disconnect,
     send,
     reboot
