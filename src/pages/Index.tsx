@@ -66,8 +66,10 @@ const Index = () => {
     <div className="flex flex-col h-screen overflow-hidden">
       <TopHeader
         connected={connected}
+        simulator={simulator}
         deviceInfo={deviceInfo}
         onConnect={connect}
+        onConnectSimulator={connectSimulator}
         onDisconnect={disconnect}
       />
       
