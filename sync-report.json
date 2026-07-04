@@ -1,0 +1,449 @@
+{
+  "updatedAt": "2026-03-08T18:22:57.518Z",
+  "results": [
+    {
+      "file": ".gitignore",
+      "status": "updated"
+    },
+    {
+      "file": "README.md",
+      "status": "updated"
+    },
+    {
+      "file": "bun.lock",
+      "status": "updated"
+    },
+    {
+      "file": "bun.lockb",
+      "status": "updated"
+    },
+    {
+      "file": "components.json",
+      "status": "updated"
+    },
+    {
+      "file": "dist/assets/index-8Tm3tkyR.css",
+      "status": "updated"
+    },
+    {
+      "file": "dist/assets/index-CGXMzPFh.js",
+      "status": "updated"
+    },
+    {
+      "file": "dist/favicon.ico",
+      "status": "updated"
+    },
+    {
+      "file": "dist/index.html",
+      "status": "updated"
+    },
+    {
+      "file": "dist/placeholder.svg",
+      "status": "updated"
+    },
+    {
+      "file": "dist/robots.txt",
+      "status": "updated"
+    },
+    {
+      "file": "dist/rocket.svg",
+      "status": "updated"
+    },
+    {
+      "file": "eslint.config.js",
+      "status": "updated"
+    },
+    {
+      "file": "firmware/config.h",
+      "status": "updated"
+    },
+    {
+      "file": "firmware/firmware.ino",
+      "status": "updated"
+    },
+    {
+      "file": "firmware/gps_logic.ino",
+      "status": "updated"
+    },
+    {
+      "file": "firmware/receiver_logic.ino",
+      "status": "updated"
+    },
+    {
+      "file": "firmware/serial_comm.ino",
+      "status": "updated"
+    },
+    {
+      "file": "firmware/servo_logic.ino",
+      "status": "updated"
+    },
+    {
+      "file": "firmware_reference.cpp",
+      "status": "updated"
+    },
+    {
+      "file": "index.html",
+      "status": "updated"
+    },
+    {
+      "file": "package-lock.json",
+      "status": "updated"
+    },
+    {
+      "file": "package.json",
+      "status": "updated"
+    },
+    {
+      "file": "postcss.config.js",
+      "status": "updated"
+    },
+    {
+      "file": "public/favicon.ico",
+      "status": "updated"
+    },
+    {
+      "file": "public/placeholder.svg",
+      "status": "updated"
+    },
+    {
+      "file": "public/robots.txt",
+      "status": "updated"
+    },
+    {
+      "file": "public/rocket.svg",
+      "status": "updated"
+    },
+    {
+      "file": "scripts/bootstrap Marathon.ps1",
+      "status": "updated"
+    },
+    {
+      "file": "scripts/dev.ps1",
+      "status": "updated"
+    },
+    {
+      "file": "scripts/sync-from-github.mjs",
+      "status": "updated"
+    },
+    {
+      "file": "src/App.css",
+      "status": "updated"
+    },
+    {
+      "file": "src/App.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/Console.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/GpsPage.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/LandingPage.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/NavLink.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/PinsPage.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/PortsPage.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ReceiverPage.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ServoPage.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/SetupPage.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/Sidebar.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/StatusBar.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/TopHeader.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/accordion.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/alert-dialog.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/alert.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/aspect-ratio.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/avatar.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/badge.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/breadcrumb.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/button.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/calendar.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/card.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/carousel.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/chart.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/checkbox.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/collapsible.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/command.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/context-menu.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/dialog.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/drawer.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/dropdown-menu.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/form.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/hover-card.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/input-otp.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/input.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/label.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/menubar.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/navigation-menu.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/pagination.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/popover.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/progress.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/radio-group.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/resizable.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/scroll-area.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/select.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/separator.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/sheet.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/sidebar.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/skeleton.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/slider.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/sonner.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/switch.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/table.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/tabs.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/textarea.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/toast.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/toaster.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/toggle-group.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/toggle.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/tooltip.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/ui/use-toast.ts",
+      "status": "updated"
+    },
+    {
+      "file": "src/hooks/use-mobile.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/hooks/use-toast.ts",
+      "status": "updated"
+    },
+    {
+      "file": "src/hooks/useSerial.ts",
+      "status": "updated"
+    },
+    {
+      "file": "src/index.css",
+      "status": "updated"
+    },
+    {
+      "file": "src/lib/utils.ts",
+      "status": "updated"
+    },
+    {
+      "file": "src/main.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/pages/Index.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/pages/NotFound.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/test/example.test.ts",
+      "status": "updated"
+    },
+    {
+      "file": "src/test/setup.ts",
+      "status": "updated"
+    },
+    {
+      "file": "src/vite-env.d.ts",
+      "status": "updated"
+    },
+    {
+      "file": "tailwind.config.ts",
+      "status": "updated"
+    },
+    {
+      "file": "tsconfig.app.json",
+      "status": "updated"
+    },
+    {
+      "file": "tsconfig.json",
+      "status": "updated"
+    },
+    {
+      "file": "tsconfig.node.json",
+      "status": "updated"
+    },
+    {
+      "file": "vite.config.ts",
+      "status": "updated"
+    },
+    {
+      "file": "vitest.config.ts",
+      "status": "updated"
+    }
+  ]
+}
