@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-03-08T18:22:57.518Z",
+  "updatedAt": "2026-07-04T13:01:42.353Z",
   "results": [
     {
       "file": ".gitignore",
@@ -22,11 +22,19 @@
       "status": "updated"
     },
     {
+      "file": "dist/assets/index-6d_ervhs.css",
+      "status": "updated"
+    },
+    {
       "file": "dist/assets/index-8Tm3tkyR.css",
       "status": "updated"
     },
     {
       "file": "dist/assets/index-CGXMzPFh.js",
+      "status": "updated"
+    },
+    {
+      "file": "dist/assets/index-OtsyVzni.js",
       "status": "updated"
     },
     {
@@ -54,6 +62,14 @@
       "status": "updated"
     },
     {
+      "file": "firmware/battery.cpp",
+      "status": "updated"
+    },
+    {
+      "file": "firmware/battery.h",
+      "status": "updated"
+    },
+    {
       "file": "firmware/config.h",
       "status": "updated"
     },
@@ -66,6 +82,10 @@
       "status": "updated"
     },
     {
+      "file": "firmware/motor_logic.ino",
+      "status": "updated"
+    },
+    {
       "file": "firmware/receiver_logic.ino",
       "status": "updated"
     },
@@ -75,6 +95,14 @@
     },
     {
       "file": "firmware/servo_logic.ino",
+      "status": "updated"
+    },
+    {
+      "file": "firmware/steering.ino",
+      "status": "updated"
+    },
+    {
+      "file": "firmware/throttle.ino",
       "status": "updated"
     },
     {
@@ -134,6 +162,10 @@
       "status": "updated"
     },
     {
+      "file": "src/components/BatteryPage.tsx",
+      "status": "updated"
+    },
+    {
       "file": "src/components/Console.tsx",
       "status": "updated"
     },
@@ -143,6 +175,10 @@
     },
     {
       "file": "src/components/LandingPage.tsx",
+      "status": "updated"
+    },
+    {
+      "file": "src/components/MotorsPage.tsx",
       "status": "updated"
     },
     {
@@ -394,6 +430,18 @@
       "status": "updated"
     },
     {
+      "file": "src/lib/gpsCommands.ts",
+      "status": "updated"
+    },
+    {
+      "file": "src/lib/motorCommands.ts",
+      "status": "updated"
+    },
+    {
+      "file": "src/lib/pinReservations.ts",
+      "status": "updated"
+    },
+    {
       "file": "src/lib/utils.ts",
       "status": "updated"
     },
@@ -414,11 +462,19 @@
       "status": "updated"
     },
     {
+      "file": "src/test/motorCommands.test.ts",
+      "status": "updated"
+    },
+    {
       "file": "src/test/setup.ts",
       "status": "updated"
     },
     {
       "file": "src/vite-env.d.ts",
+      "status": "updated"
+    },
+    {
+      "file": "sync-report.json",
       "status": "updated"
     },
     {
