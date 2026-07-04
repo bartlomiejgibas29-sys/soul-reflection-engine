@@ -9,6 +9,8 @@ import ReceiverPage from "@/components/ReceiverPage";
 import GpsPage from "@/components/GpsPage";
 import PinsPage from "@/components/PinsPage";
 import ServoPage from "@/components/ServoPage";
+import MotorsPage from "@/components/MotorsPage";
+import BatteryPage from "@/components/BatteryPage";
 import Console from "@/components/Console";
 import { useSerial } from "@/hooks/useSerial";
 
@@ -20,7 +22,7 @@ const Index = () => {
       return "Setup";
     }
   });
-  const { connected, simulator, deviceInfo, lastSent, uartConfigs, pinConfigs, servoConfigs, receiverData, receiverSettings, gpsData, gpsSettings, logs, connect, connectSimulator, disconnect, send, reboot } = useSerial();
+  const { connected, deviceInfo, lastSent, uartConfigs, pinConfigs, servoConfigs, receiverData, receiverSettings, gpsData, gpsSettings, batteryConfig, motorConfig, motorState, moduleStates, logs, connect, disconnect, send, reboot } = useSerial();
 
   useEffect(() => {
     if (!connected) {
@@ -28,11 +30,21 @@ const Index = () => {
       return;
     }
 
-    // Refresh data when tab changes
+    if (activeTab === "GPS" && moduleStates?.gps === false) {
+      setActiveTab("Setup");
+    }
+
+    // First disable all telemetry to stop background noise
+    send("DISABLE_ALL_TELEMETRY");
+
+    // Refresh data and enable specific telemetry when tab changes
     switch (activeTab) {
       case "Ports":
+        send("PIN_TABLE");
+        break;
       case "Pins":
         send("PIN_TABLE");
+        send("MOTOR_PINS");
         break;
       case "Servo":
         send("PIN_TABLE");
@@ -40,15 +52,26 @@ const Index = () => {
         break;
       case "Receiver":
         send("RX_SETTINGS");
+        send("ENABLE_RECEIVER_TELEMETRY");
         break;
       case "GPS":
-        send("GPS_SETTINGS");
+        if (moduleStates?.gps) {
+          send("GPS_SETTINGS");
+          send("ENABLE_GPS_TELEMETRY");
+        }
+        break;
+      case "Battery":
+        send("GET_BATTERY_CONFIG");
+        break;
+      case "Motors":
+        send("MOTOR_CONFIG");
+        send("MOTOR_STATE");
         break;
       case "Setup":
         send("FULL_CONFIG");
         break;
     }
-  }, [connected, activeTab]);
+  }, [connected, activeTab, moduleStates]);
 
   // Handle Save & Reboot from children
   const handleReboot = () => {
@@ -66,20 +89,19 @@ const Index = () => {
     <div className="flex flex-col h-screen overflow-hidden">
       <TopHeader
         connected={connected}
-        simulator={simulator}
         deviceInfo={deviceInfo}
         onConnect={connect}
-        onConnectSimulator={connectSimulator}
         onDisconnect={disconnect}
       />
       
       <div className="flex flex-1 overflow-hidden">
         {connected && (
-          <Sidebar 
-            activeTab={activeTab} 
-            onTabChange={setActiveTab} 
-          />
-        )}
+              <Sidebar 
+                activeTab={activeTab} 
+                onTabChange={setActiveTab} 
+                moduleStates={moduleStates}
+              />
+            )}
         
         <main className={`flex-1 flex flex-col overflow-hidden bg-background ${connected ? 'p-6' : 'p-0'}`}>
           {!connected ? (
@@ -89,17 +111,21 @@ const Index = () => {
               <h1 className="text-2xl font-light text-foreground mb-4 shrink-0">{activeTab}</h1>
               
               <div className="flex-1 overflow-y-auto min-h-0">
-                {activeTab === "Setup" && <SetupPage uartConfigs={uartConfigs} onSend={send} onReboot={reboot} gpsData={gpsData} />}
-                
+                {activeTab === "Setup" && <SetupPage uartConfigs={uartConfigs} onSend={send} onReboot={reboot} gpsData={gpsData} moduleStates={moduleStates} />}
+
                 {activeTab === "Ports" && <PortsPage uartConfigs={uartConfigs} connected={connected} onSend={send} />}
-                
-                {activeTab === "Pins" && <PinsPage uartConfigs={uartConfigs} pinConfigs={pinConfigs} onSend={send} />}
-                
+
+                {activeTab === "Pins" && <PinsPage uartConfigs={uartConfigs} pinConfigs={pinConfigs} motorConfig={motorConfig} onSend={send} />}
+
                 {activeTab === "Servo" && <ServoPage pinConfigs={pinConfigs} servoConfigs={servoConfigs} onSend={send} />}
 
                 {activeTab === "Receiver" && <ReceiverPage data={receiverData} settings={receiverSettings} onSend={send} />}
 
-                {activeTab === "GPS" && <GpsPage data={gpsData} settings={gpsSettings} onSend={send} />}
+                {activeTab === "GPS" && moduleStates?.gps && <GpsPage data={gpsData} settings={gpsSettings} onSend={send} />}
+                
+                {activeTab === "Motors" && <MotorsPage connected={connected} config={motorConfig} state={motorState} uartConfigs={uartConfigs} pinConfigs={pinConfigs} onSendText={send} />}
+                
+                {activeTab === "Battery" && <BatteryPage config={batteryConfig} onSend={send} />}
 
                 {activeTab === "CLI" && (
                   <div className="h-full pb-2">

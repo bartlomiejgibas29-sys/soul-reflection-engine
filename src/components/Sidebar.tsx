@@ -1,21 +1,25 @@
-import { Cable, Radio, Terminal, Settings, Map, Cpu, SlidersHorizontal } from "lucide-react";
-
-const navItems = [
-  { icon: Settings, label: "Setup" },
-  { icon: Cable, label: "Ports" },
-  { icon: Cpu, label: "Pins" },
-  { icon: SlidersHorizontal, label: "Servo" },
-  { icon: Radio, label: "Receiver" },
-  { icon: Map, label: "GPS" },
-  { icon: Terminal, label: "CLI" },
-];
+import { Cable, Radio, Terminal, Settings, Map, Cpu, SlidersHorizontal, Battery, Zap } from "lucide-react";
+import type { ModuleStates } from "@/hooks/useSerial";
 
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  moduleStates?: ModuleStates;
 }
 
-const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
+const Sidebar = ({ activeTab, onTabChange, moduleStates }: SidebarProps) => {
+  const navItems = [
+    { icon: Settings, label: "Setup" },
+    { icon: Cable, label: "Ports" },
+    { icon: Cpu, label: "Pins" },
+    { icon: SlidersHorizontal, label: "Servo" },
+    { icon: Radio, label: "Receiver" },
+    ...(moduleStates?.gps !== false ? [{ icon: Map, label: "GPS" }] : []),
+    { icon: Zap, label: "Motors" },
+    { icon: Battery, label: "Battery" },
+    { icon: Terminal, label: "CLI" },
+  ];
+
   return (
     <nav className="w-48 min-h-full bg-sidebar border-r border-sidebar-border flex flex-col">
       <div className="flex flex-col py-2">

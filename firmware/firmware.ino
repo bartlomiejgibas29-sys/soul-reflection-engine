@@ -1,4 +1,5 @@
 #include "config.h"
+#include "battery.h"
 
 Preferences prefs;
 
@@ -39,7 +40,9 @@ bool gps_galileo = true;
 bool gps_home_once = true;
 String gps_ground_assist = "European";
 float gps_mag_declination = 0.0;
+bool gps_module_enabled = true;
 bool gpsMode = false;
+bool gpsTelemetry = false;
 unsigned long lastGpsUpdate = 0;
 unsigned long lastSatUpdate = 0;
 
@@ -50,6 +53,22 @@ uint8_t satCount = 0;
 // Servo config storage
 ServoConfig servoConfigs[MAX_SERVOS];
 int servoCount = 0;
+int motor_rpwm_pin = -1;
+int motor_lpwm_pin = -1;
+int motor_en_pin = -1;
+int motor_pwm_freq = 20000;
+int motor_max_pwm_percent = 100;
+int motor_startup_pwm_percent = 0;
+int motor_ramp_up_ms = 200;
+int motor_ramp_down_ms = 200;
+int motor_direction_change_ms = 250;
+int motor_direction_smoothing = 50;
+bool motor_configured = false;
+bool motor_live_test_active = false;
+bool motor_failsafe_triggered = false;
+bool motorTelemetry = false;
+int motor_live_target_percent = 0;
+float motor_current_output_percent = 0.0f;
 
 // Obiekty
 SoftwareSerial Serial2;
@@ -59,12 +78,17 @@ AlfredoCRSF crsf;
 TinyGPSPlus gps;
 unsigned long lastCrsfUpdate = 0;
 bool receiverMode = false;
+bool receiverTelemetry = false;
 
 // Deklaracje funkcji z innych plików
 void handleCommands();
 void handleGpsLoop();
 void handleReceiverLoop();
 void handleServoLoop();
+void configureGps();
+void initPinConfig();
+void initMotorDriver();
+void handleMotorLoop();
 
 // --- ŁADOWANIE USTAWIEŃ Z PAMIĘCI FLASH ---
 void loadSettings() {
@@ -113,6 +137,20 @@ void loadSettings() {
     gps_home_once = prefs.getBool("gps_home_once", true);
     gps_ground_assist = prefs.getString("gps_assist", "European");
     gps_mag_declination = prefs.getFloat("gps_mag", 0.0);
+    gps_module_enabled = prefs.getBool("gps_mod_en", true);
+
+    // Motor settings
+    motor_rpwm_pin = prefs.getInt("mot_rpwm", -1);
+    motor_lpwm_pin = prefs.getInt("mot_lpwm", -1);
+    motor_en_pin = prefs.getInt("mot_en", -1);
+    motor_pwm_freq = prefs.getInt("mot_freq", 20000);
+    motor_max_pwm_percent = prefs.getInt("mot_max", 100);
+    motor_startup_pwm_percent = prefs.getInt("mot_start", 0);
+    motor_ramp_up_ms = prefs.getInt("mot_rup", 200);
+    motor_ramp_down_ms = prefs.getInt("mot_rdn", 200);
+    motor_direction_change_ms = prefs.getInt("mot_dirchg", 250);
+    motor_direction_smoothing = prefs.getInt("mot_dirs", 50);
+    motor_configured = motor_rpwm_pin >= 0 && motor_lpwm_pin >= 0;
 
     // Load Servo Configs
     servoCount = prefs.getInt("srv_count", 0);
@@ -155,23 +193,45 @@ void setup() {
     
     loadSettings();
     initPinConfig();
+    setupBattery();
+    initSteering();
+    initThrottle();
+    initMotorDriver();
     
     // Inicjalizacja portów UART tylko jeśli zostały włączone w ustawieniach
     if (u1_enabled) Serial1.begin(u1_baud, SERIAL_8N1, u1_rx, u1_tx);
     if (u2_enabled) Serial2.begin(u2_baud, SWSERIAL_8N1, u2_rx, u2_tx);
     if (u3_enabled) Serial3.begin(u3_baud, SWSERIAL_8N1, u3_rx, u3_tx);
 
-    // skrócony raport startowy w formacie tabeli CSV
-    Serial.println("UART,EN,RX,TX,Baud,Type");
-    Serial.printf("U1,%s,%d,%d,%ld,%s\n", u1_enabled?"ENABLED":"DISABLED", u1_rx, u1_tx, u1_baud, u1_type.c_str());
-    Serial.printf("U2,%s,%d,%d,%ld,%s\n", u2_enabled?"ENABLED":"DISABLED", u2_rx, u2_tx, u2_baud, u2_type.c_str());
-    Serial.printf("U3,%s,%d,%d,%ld,%s\n", u3_enabled?"ENABLED":"DISABLED", u3_rx, u3_tx, u3_baud, u3_type.c_str());
-    Serial.println("(użyj STATUS lub PIN_TABLE aby otrzymać dane)");
+    // Automatyczne uruchomienie trybu odbiornika, jeśli UART1 jest skonfigurowany jako RECEIVER
+    if (u1_enabled && u1_type == "RECEIVER") {
+        Serial1.end(); // Zwolnij HardwareSerial(1) dla CRSF
+        crsfSerial.begin(420000, SERIAL_8N1, u1_rx, u1_tx);
+        crsf.begin(crsfSerial);
+        receiverMode = true;
+        Serial.println(">> AUTO-START: Receiver Mode ENABLED on UART1");
+    }
+
+    // Automatyczne włączenie obsługi GPS jeśli skonfigurowano
+    if (gps_module_enabled && ((u1_enabled && u1_type == "GPS") || (u2_enabled && u2_type == "GPS") || (u3_enabled && u3_type == "GPS"))) {
+        gpsMode = true;
+        configureGps(); // Wymuś konfigurację (10Hz, Galileo itp.)
+        Serial.println(">> AUTO-START: GPS Mode ENABLED");
+    }
+
+    // Raport startowy w tym samym formacie co PIN_TABLE / FULL_CONFIG
+    Serial.printf("UART_CONF,1,%s,%d,%d,%ld,%s\n", u1_enabled?"ENABLED":"DISABLED", u1_rx, u1_tx, u1_baud, u1_type.c_str());
+    Serial.printf("UART_CONF,2,%s,%d,%d,%ld,%s\n", u2_enabled?"ENABLED":"DISABLED", u2_rx, u2_tx, u2_baud, u2_type.c_str());
+    Serial.printf("UART_CONF,3,%s,%d,%d,%ld,%s\n", u3_enabled?"ENABLED":"DISABLED", u3_rx, u3_tx, u3_baud, u3_type.c_str());
 }
 
 void loop() {
     handleCommands();
     handleGpsLoop();
     handleReceiverLoop();
+    handleSteering();
+    handleThrottle();
     handleServoLoop();
+    handleMotorLoop();
+    updateBattery();
 }

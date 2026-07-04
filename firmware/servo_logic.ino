@@ -36,6 +36,12 @@ void handleServoLoop() {
 
         ServoConfig &c = servoConfigs[idx];
 
+        // Skip servos that are controlled by throttle logic
+        if ((control_mode == "PROPORTIONAL" && c.sourceChannel == throttle_ch) || 
+            (control_mode == "DIRECTION_SELECTED" && c.sourceChannel == speed_ch)) {
+            continue;
+        }
+
         // --- Determine target microseconds ---
         float targetUs = c.currentUs;
 

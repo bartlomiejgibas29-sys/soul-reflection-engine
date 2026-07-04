@@ -33,7 +33,7 @@ export interface GpsData {
   fix: boolean;
   numSatellites: number;
   altitude: number; // meters
-  speed: number; // cm/s
+  speed: number; // km/h (from firmware GPS_FULL)
   headingImu: number;
   headingGps: number;
   latitude: number;
@@ -82,8 +82,17 @@ export interface GpsSettings {
 
 export interface PinConfig {
   pin: number;
-  mode: "DISABLED" | "LIGHT" | "SERVO" | "STEERING";
+  mode: "DISABLED" | "LIGHT" | "SERVO" | "STEERING" | "BATTERY" | "MOTOR";
   value?: number; // PWM value or state
+}
+
+export interface BatteryConfig {
+  cells: number;
+  r1: number;
+  r2: number;
+  calibration: number;
+  pin: number;
+  voltage: number;
 }
 
 export interface ServoRange {
@@ -108,6 +117,32 @@ export interface ServoConfig {
   ranges: ServoRange[];
 }
 
+export interface ModuleStates {
+  gps: boolean;
+  receiver: boolean;
+}
+
+export interface MotorConfig {
+  rpwmPin: number;
+  lpwmPin: number;
+  enPin: number;
+  frequency: number;
+  maxPwm: number;
+  startupPwm: number;
+  rampUpMs: number;
+  rampDownMs: number;
+  directionChangeMs: number;
+  directionSmoothing: number;
+  configured: boolean;
+}
+
+export interface MotorState {
+  liveMode: boolean;
+  targetValue: number;
+  outputValue: number;
+  failsafe: boolean;
+}
+
 export function useSerial() {
   const [connected, setConnected] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo | null>(null);
@@ -120,15 +155,32 @@ export function useSerial() {
   const [gpsData, setGpsData] = useState<GpsData | null>(null);
   const [receiverSettings, setReceiverSettings] = useState<ReceiverSettings | null>(null);
   const [gpsSettings, setGpsSettings] = useState<GpsSettings | null>(null);
+  const [batteryConfig, setBatteryConfig] = useState<BatteryConfig | null>(null);
+  const [motorConfig, setMotorConfig] = useState<MotorConfig | null>(null);
+  const [motorState, setMotorState] = useState<MotorState | null>(null);
+  const [moduleStates, setModuleStates] = useState<ModuleStates>({ gps: true, receiver: true });
   const [pendingSatCount, setPendingSatCount] = useState<number>(0);
-  const [simulator, setSimulator] = useState(false);
   const pendingSatsRef = useRef<GpsSatellite[]>([]);
-  const simulatorRef = useRef(false);
+  const pendingLogsRef = useRef<string[]>([]);
   
   const portRef = useRef<any>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const bufferRef = useRef<string>("");
   const writeChainRef = useRef<Promise<void>>(Promise.resolve());
+
+  // Flush logs periodically to avoid excessive re-renders
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (pendingLogsRef.current.length > 0) {
+        setLogs(prev => {
+          const newLogs = [...prev, ...pendingLogsRef.current];
+          pendingLogsRef.current = [];
+          return newLogs.slice(-2000);
+        });
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, []);
 
   const parseBoardResponse = useCallback((line: string) => {
     line = line.trim();
@@ -143,27 +195,120 @@ export function useSerial() {
       board = "esp32c3";
     }
 
+    const parseUartConfigLine = (parts: string[]) => {
+      const id = parseInt(parts[1]);
+      if (id < 1 || id > 3 || parts.length < 7) return;
+      setUartConfigs(prev => {
+        const next = [...prev];
+        while (next.length < id) {
+          next.push({ id: next.length + 1, enabled: false, rx: -1, tx: -1, baudrate: 9600, type: "GENERIC" });
+        }
+        const type = ["GENERIC", "RECEIVER", "GPS"].includes(parts[6]) ? parts[6] : "GENERIC";
+        next[id - 1] = {
+          id,
+          enabled: parts[2] === "ENABLED",
+          rx: parseInt(parts[3]),
+          tx: parseInt(parts[4]),
+          baudrate: parseInt(parts[5]),
+          type: type as UartConfig["type"],
+        };
+        return next;
+      });
+    };
+
     // Parse UART config: UART_CONF,id,enabled,rx,tx,baud,type
     if (line.startsWith("UART_CONF,")) {
+      parseUartConfigLine(line.split(","));
+      return;
+    }
+
+    // Legacy boot format: U1,enabled,rx,tx,baud,type
+    if (/^U[1-3],/.test(line)) {
       const parts = line.split(",");
-      const id = parseInt(parts[1]);
-      if (id >= 1 && id <= 3) {
-        setUartConfigs(prev => {
-          const next = [...prev];
-          // Ensure array is large enough
-          while (next.length < id) {
-            next.push({ id: next.length + 1, enabled: false, rx: -1, tx: -1, baudrate: 9600, type: "GENERIC" });
-          }
-          const type = ["GENERIC", "RECEIVER", "GPS"].includes(parts[6]) ? parts[6] : "GENERIC";
-          next[id-1] = {
-            id,
-            enabled: parts[2] === "ENABLED",
-            rx: parseInt(parts[3]),
-            tx: parseInt(parts[4]),
-            baudrate: parseInt(parts[5]),
-            type: type as any
-          };
-          return next;
+      const legacyId = parseInt(parts[0].slice(1), 10);
+      if (legacyId >= 1 && legacyId <= 3) {
+        parseUartConfigLine([
+          "UART_CONF",
+          String(legacyId),
+          parts[1],
+          parts[2],
+          parts[3],
+          parts[4],
+          parts[5] ?? "GENERIC",
+        ]);
+      }
+      return;
+    }
+
+    // Parse BATTERY_CFG,cells,r1,r2,cal,pin,voltage
+    if (line.startsWith("BATTERY_CFG,")) {
+      const parts = line.split(",");
+      if (parts.length >= 7) {
+        setBatteryConfig({
+          cells: parseInt(parts[1]),
+          r1: parseFloat(parts[2]),
+          r2: parseFloat(parts[3]),
+          calibration: parseFloat(parts[4]),
+          pin: parseInt(parts[5]),
+          voltage: parseFloat(parts[6]),
+        });
+      }
+      return;
+    }
+
+    if (line.startsWith("MOTOR_CFG,")) {
+      const parts = line.split(",");
+      if (parts.length >= 12) {
+        setMotorConfig({
+          rpwmPin: parseInt(parts[1]) || -1,
+          lpwmPin: parseInt(parts[2]) || -1,
+          enPin: parseInt(parts[3]) || -1,
+          frequency: parseInt(parts[4]) || 20000,
+          maxPwm: parseInt(parts[5]) || 100,
+          startupPwm: parseInt(parts[6]) || 0,
+          rampUpMs: parseInt(parts[7]) || 0,
+          rampDownMs: parseInt(parts[8]) || 0,
+          directionChangeMs: parseInt(parts[9]) || 0,
+          directionSmoothing: parseInt(parts[10]) || 0,
+          configured: parts[11] === "1",
+        });
+      }
+      return;
+    }
+
+    if (line.startsWith("MOTOR_PINS,")) {
+      const parts = line.split(",");
+      if (parts.length >= 4) {
+        setMotorConfig(prev => prev ? {
+          ...prev,
+          rpwmPin: parseInt(parts[1]) || -1,
+          lpwmPin: parseInt(parts[2]) || -1,
+          enPin: parseInt(parts[3]) || -1,
+        } : {
+          rpwmPin: parseInt(parts[1]) || -1,
+          lpwmPin: parseInt(parts[2]) || -1,
+          enPin: parseInt(parts[3]) || -1,
+          frequency: 20000,
+          maxPwm: 100,
+          startupPwm: 0,
+          rampUpMs: 0,
+          rampDownMs: 0,
+          directionChangeMs: 0,
+          directionSmoothing: 0,
+          configured: false,
+        });
+      }
+      return;
+    }
+
+    if (line.startsWith("MOTOR_STATE,")) {
+      const parts = line.split(",");
+      if (parts.length >= 5) {
+        setMotorState({
+          liveMode: parts[1] === "1",
+          targetValue: parseInt(parts[2]) || 0,
+          outputValue: parseInt(parts[3]) || 0,
+          failsafe: parts[4] === "1",
         });
       }
       return;
@@ -174,7 +319,10 @@ export function useSerial() {
       const parts = line.split(",");
       if (parts.length >= 3) {
         const pin = parseInt(parts[1]);
-        const mode = parts[2] as "DISABLED" | "LIGHT" | "SERVO" | "STEERING";
+        const rawMode = parts[2];
+        const mode = ["DISABLED", "LIGHT", "SERVO", "STEERING", "BATTERY", "MOTOR"].includes(rawMode)
+          ? (rawMode as PinConfig["mode"])
+          : "DISABLED";
         const val = parts.length > 3 ? parseInt(parts[3]) : 0;
         
         setPinConfigs(prev => {
@@ -186,7 +334,7 @@ export function useSerial() {
       return;
     }
 
-    // Parse SERVO_CFG:pin,freq,min,mid,max,src,rev,rate,speed,mode,minAngle,maxAngle
+    // Parse SERVO_CFG:pin,freq,min,mid,max,src,rev,rate,speed,mode,minAngle,maxAngle,rangeCount
     if (line.startsWith("SERVO_CFG,")) {
       const parts = line.split(",");
       if (parts.length >= 10) {
@@ -194,9 +342,19 @@ export function useSerial() {
         const mode = parts.length >= 11 ? parseInt(parts[10]) : 0;
         const minAngle = parts.length >= 12 ? parseInt(parts[11]) : 0;
         const maxAngle = parts.length >= 13 ? parseInt(parts[12]) : 180;
+        const rangeCount = parts.length >= 14 ? parseInt(parts[13]) : 0;
 
         setServoConfigs(prev => {
           const idx = prev.findIndex(c => c.pin === pin);
+          const currentRanges = idx >= 0 ? prev[idx].ranges : [];
+          
+          // If rangeCount is specified and smaller than current ranges, truncate them
+          // to match firmware's state
+          let newRanges = [...currentRanges];
+          if (parts.length >= 14 && rangeCount < newRanges.length) {
+              newRanges = newRanges.slice(0, rangeCount);
+          }
+
           const newCfg: ServoConfig = {
             pin,
             frequency: parseInt(parts[2]),
@@ -210,7 +368,7 @@ export function useSerial() {
             mode,
             minAngle,
             maxAngle,
-            ranges: idx >= 0 ? prev[idx].ranges : [],
+            ranges: newRanges,
           };
 
           if (idx >= 0) {
@@ -230,6 +388,7 @@ export function useSerial() {
       if (parts.length >= 6) {
         const pin = parseInt(parts[1]);
         const rIdx = parseInt(parts[2]);
+        if (rIdx < 0 || rIdx > 20) return; // Safety check
         const minIn = parseInt(parts[3]);
         const maxIn = parseInt(parts[4]);
         const targetUs = parseInt(parts[5]);
@@ -274,6 +433,22 @@ export function useSerial() {
       return;
     }
 
+    // Parse Module Status: MODULE_STATUS,GPS,1 or MODULE_STATUS,RECEIVER,0
+    if (line.startsWith("MODULE_STATUS,")) {
+      const parts = line.split(",");
+      if (parts.length >= 3) {
+        const moduleName = parts[1];
+        const enabled = parts[2] === "1";
+        setModuleStates(prev => {
+          const newStates = { ...prev };
+          if (moduleName === "GPS") newStates.gps = enabled;
+          if (moduleName === "RECEIVER") newStates.receiver = enabled;
+          return newStates;
+        });
+      }
+      return;
+    }
+
     // Parse Device info: DEVICE,type,version
     if (line.startsWith("DEVICE,")) {
       const parts = line.split(",");
@@ -289,12 +464,13 @@ export function useSerial() {
       return;
     }
 
-    // Parse GPS Data: GPS_FULL,fix,sats,lat,lon,alt,speed,course,hdop
+    // Parse GPS Data: GPS_FULL,fix,sats,lat,lon,alt,speed(km/h),course,hdop
     if (line.startsWith("GPS_FULL,")) {
       const parts = line.split(",");
       if (parts.length >= 9) {
         const fix = parts[1] === "1";
-        const numSat = parseInt(parts[2]) || 0;
+        let numSat = parseInt(parts[2]) || 0;
+        if (numSat > 50) numSat = 50; // Safety cap to prevent OOM
         const lat = parseFloat(parts[3]) || 0;
         const lon = parseFloat(parts[4]) || 0;
         const alt = parseFloat(parts[5]) || 0;
@@ -303,30 +479,8 @@ export function useSerial() {
         const dop = parseFloat(parts[8]) || 0;
 
         setGpsData(prev => {
-          // Generate pseudo-satellites if detailed info is missing but we have count
-          // Only regenerate if count changed to avoid flickering, or if empty
-          let sats = prev?.satellites ?? [];
-          if (numSat > 0 && (sats.length === 0 || sats.length !== numSat)) {
-             sats = Array.from({ length: numSat }).map((_, i) => {
-                  // Realistic PRN numbers: GPS (1-32), GLONASS (65-88), Galileo (101-136)
-                  const satId = i < 8 ? (i + 1) : (i < 12 ? (i + 57) : (i + 89));
-                  const gnssId = satId <= 32 ? "GPS" : (satId <= 88 ? "GLO" : "GAL");
-                  
-                  // Signal strength (C/N0) usually 20-50 dB-Hz
-                  // Generate varied signal strength based on index and randomness
-                  const baseSignal = 48 - (i * 3) - (dop * 2);
-                  const signalStrength = Math.max(15, Math.min(50, Math.round(baseSignal + Math.random() * 6)));
-                  const isUsed = fix && i < (numSat - (numSat > 4 ? 2 : 0)); 
-                  
-                  return {
-                    gnssId,
-                    satId,
-                    signalStrength,
-                    status: (isUsed ? "used" : "unused") as "used" | "unused",
-                    quality: (isUsed ? "fully locked" : "searching") as GpsSatellite["quality"],
-                  };
-                });
-          }
+          // Keep existing satellites if we don't have new detailed data
+          const sats = prev?.satellites ?? [];
 
           return {
             fix,
@@ -460,12 +614,14 @@ export function useSerial() {
   }, []);
 
   const send = useCallback(async (data: string) => {
-    if (simulatorRef.current) {
-      setLastSent(`TX: ${data}`);
-      setLogs(prev => [...prev.slice(-1999), `> ${data}\n`]);
-      return;
-    }
     if (!portRef.current || !portRef.current.writable) return;
+
+    if (data === "SET_GPS_MODULE:0") {
+      setModuleStates(prev => ({ ...prev, gps: false }));
+    } else if (data === "SET_GPS_MODULE:1") {
+      setModuleStates(prev => ({ ...prev, gps: true }));
+    }
+
     writeChainRef.current = writeChainRef.current.then(async () => {
       let writer: any = null;
       try {
@@ -473,10 +629,10 @@ export function useSerial() {
         const encoded = new TextEncoder().encode(data + "\n");
         await writer.write(encoded);
         setLastSent(`TX: ${data}`);
-        setLogs(prev => [...prev, `> ${data}\n`]);
+        pendingLogsRef.current.push(`> ${data}\n`);
       } catch (err: any) {
         console.error("Send error:", err);
-        setLogs(prev => [...prev, `Error sending: ${err}\n`]);
+        pendingLogsRef.current.push(`Error sending: ${err}\n`);
       } finally {
         try {
           if (writer) writer.releaseLock();
@@ -501,10 +657,7 @@ export function useSerial() {
         
         const text = new TextDecoder().decode(value);
         
-        setLogs(prev => {
-            const newLogs = [...prev, text];
-            return newLogs.slice(-2000); 
-        });
+        pendingLogsRef.current.push(text);
         
         bufferRef.current += text;
         let idx = bufferRef.current.indexOf("\n");
@@ -520,10 +673,10 @@ export function useSerial() {
         console.log("Serial read cancelled by user");
       } else if (err.name === 'NetworkError' || err.message?.includes('break')) {
         console.log("Serial connection broken - device may have reset");
-        setLogs(prev => [...prev, `[System] Connection lost - device may have reset\n`]);
+        pendingLogsRef.current.push(`[System] Connection lost - device may have reset\n`);
       } else {
         console.error("Serial read error:", err);
-        setLogs(prev => [...prev, `Serial read error: ${err.message}\n`]);
+        pendingLogsRef.current.push(`Serial read error: ${err.message}\n`);
       }
     } finally {
       try {
@@ -535,24 +688,21 @@ export function useSerial() {
   }, [parseBoardResponse]);
 
   const disconnect = useCallback(async () => {
-    if (simulatorRef.current) {
-      simulatorRef.current = false;
-      setSimulator(false);
-      setConnected(false);
-      setDeviceInfo(null);
-      setUartConfigs([]);
-      setPinConfigs([]);
-      setServoConfigs([]);
-      setReceiverData(null);
-      setReceiverSettings(null);
-      setGpsData(null);
-      setGpsSettings(null);
-      setLastSent("Simulator stopped");
-      setLogs(prev => [...prev, `[Simulator] Stopped\n`]);
-      return;
-    }
     try {
       console.log("Rozłączanie...");
+
+      // Try to disable telemetry before closing if still possible
+      if (portRef.current && portRef.current.writable) {
+        try {
+           // We don't want to wait too long for this, but let's try to send it
+           const writer = portRef.current.writable.getWriter();
+           const encoded = new TextEncoder().encode("DISABLE_ALL_TELEMETRY\n");
+           await writer.write(encoded);
+           writer.releaseLock();
+        } catch (e) {
+           console.log("Could not send disable telemetry command before closing");
+        }
+      }
       
       if (readerRef.current) {
         try {
@@ -582,110 +732,12 @@ export function useSerial() {
     setUartConfigs([]);
     setReceiverData(null);
     setLastSent("Disconnected");
-    setLogs(prev => [...prev, `[System] Disconnected\n`]);
+    pendingLogsRef.current.push(`[System] Disconnected\n`);
     bufferRef.current = "";
     writeChainRef.current = Promise.resolve();
+    setMotorConfig(null);
+    setMotorState(null);
   }, []);
-
-  const connectSimulator = useCallback(() => {
-    simulatorRef.current = true;
-    setSimulator(true);
-    setConnected(true);
-    setDeviceInfo({ configurator: "1.0.0", firmware: "SIM-1.0.0", target: "esp32c3-sim" });
-    setLastSent("Simulator started");
-    setLogs(prev => [...prev, `[Simulator] Virtual device connected\n`]);
-
-    setUartConfigs([
-      { id: 1, enabled: true, rx: 4, tx: 5, baudrate: 420000, type: "RECEIVER" },
-      { id: 2, enabled: true, rx: 6, tx: 7, baudrate: 9600, type: "GPS" },
-      { id: 3, enabled: false, rx: -1, tx: -1, baudrate: 9600, type: "GENERIC" },
-    ]);
-
-    setPinConfigs([
-      { pin: 0, mode: "DISABLED", value: 0 },
-      { pin: 1, mode: "LIGHT", value: 0 },
-      { pin: 2, mode: "SERVO", value: 1500 },
-      { pin: 3, mode: "STEERING", value: 1500 },
-      { pin: 8, mode: "DISABLED", value: 0 },
-      { pin: 9, mode: "DISABLED", value: 0 },
-      { pin: 10, mode: "SERVO", value: 1500 },
-    ]);
-
-    setServoConfigs([
-      { pin: 2, frequency: 50, minUs: 1000, midUs: 1500, maxUs: 2000, sourceChannel: 1, reverse: false, rate: 1.0, speed: 0, mode: 0, minAngle: 0, maxAngle: 180, ranges: [] },
-      { pin: 3, frequency: 50, minUs: 1000, midUs: 1500, maxUs: 2000, sourceChannel: 2, reverse: false, rate: 1.0, speed: 0, mode: 0, minAngle: 0, maxAngle: 180, ranges: [] },
-      { pin: 10, frequency: 50, minUs: 1000, midUs: 1500, maxUs: 2000, sourceChannel: 3, reverse: false, rate: 1.0, speed: 0, mode: 0, minAngle: 0, maxAngle: 180, ranges: [] },
-    ]);
-
-    setReceiverSettings({
-      controlMode: "PROPORTIONAL",
-      directionChannel: 1,
-      speedChannel: 2,
-      directionPressedIsReverse: false,
-      channelMap: "AETR1234",
-      rcMin: 1000,
-      rcMid: 1500,
-      rcMax: 2000,
-      deadbandRc: 0,
-      deadbandYaw: 0,
-      deadbandThr3d: 0,
-      rcSmoothing: true,
-      rcSmoothingCoeff: 30,
-      steeringChannel: 1,
-      throttleChannel: 2,
-      steeringRev: false,
-      throttleRev: false,
-    });
-
-    setGpsSettings({
-      protocol: "UBLOX",
-      autoConfig: true,
-      useGalileo: true,
-      setHomeOnce: true,
-      groundAssistance: "AUTO",
-      declination: 5.5,
-    });
-
-    setGpsData({
-      fix: true,
-      numSatellites: 11,
-      altitude: 218.4,
-      speed: 0,
-      headingImu: 0,
-      headingGps: 92.5,
-      latitude: 52.2297,
-      longitude: 21.0122,
-      distToHome: 0,
-      dop: 0.9,
-      satellites: Array.from({ length: 11 }).map((_, i) => {
-        const satId = i < 7 ? i + 1 : (i < 10 ? i + 58 : i + 91);
-        const gnssId = satId <= 32 ? "GPS" : (satId <= 88 ? "GLO" : "GAL");
-        const used = i < 9;
-        return {
-          gnssId,
-          satId,
-          signalStrength: 45 - i * 2,
-          status: (used ? "used" : "unused") as "used" | "unused",
-          quality: (used ? "fully locked" : "searching") as GpsSatellite["quality"],
-        };
-      }),
-    });
-
-    setReceiverData({
-      channels: [1500, 1500, 1000, 1500, 1000, 2000, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500],
-      uplinkRSS1: -65,
-      uplinkRSS2: -68,
-      uplinkLQ: 100,
-      uplinkSNR: 12,
-      activeAntenna: 1,
-      rfMode: 2,
-      uplinkTXPower: 100,
-      downlinkRSSI: -70,
-      downlinkLQ: 99,
-      downlinkSNR: 10,
-    });
-  }, []);
-
 
   const connect = useCallback(async (baudRate: number = 115200) => {
     const openPortWithTimeout = (port: any, timeoutMs: number) =>
@@ -723,7 +775,7 @@ export function useSerial() {
       portRef.current = port;
       setConnected(true);
       setLastSent("Connected to serial port");
-      setLogs(prev => [...prev, `[System] Connected at ${baudRate} baud\n`]);
+      pendingLogsRef.current.push(`[System] Connected at ${baudRate} baud\n`);
       localStorage.setItem("lastBaudRate", baudRate.toString());
       bufferRef.current = "";
 
@@ -745,10 +797,10 @@ export function useSerial() {
         console.log("User cancelled port selection");
       } else if (err.name === "NetworkError") {
         alert("Port szeregowy jest już używany przez inną aplikację lub nie jest dostępny.");
-        setLogs(prev => [...prev, `[Error] Port unavailable - may be in use by another application\n`]);
+        pendingLogsRef.current.push(`[Error] Port unavailable - may be in use by another application\n`);
       } else {
         console.error("Serial connection error:", err);
-        setLogs(prev => [...prev, `Connection error: ${err.message}\n`]);
+        pendingLogsRef.current.push(`Connection error: ${err.message}\n`);
         alert("Błąd połączenia: " + err.message);
       }
 
@@ -775,7 +827,7 @@ export function useSerial() {
           portRef.current = port;
           setConnected(true);
           setLastSent(shouldOnce ? "Auto-connected after restart" : "Auto-connected");
-          setLogs(prev => [...prev, `[System] Auto-connected at ${lastBaud} baud${shouldOnce ? " after restart" : ""}\n`]);
+          pendingLogsRef.current.push(`[System] Auto-connected at ${lastBaud} baud${shouldOnce ? " after restart" : ""}\n`);
           bufferRef.current = "";
           
           if (port.readable) {
@@ -788,11 +840,11 @@ export function useSerial() {
             send("FULL_CONFIG");
           }, 500);
         } else {
-          setLogs(prev => [...prev, `[System] No serial ports available for auto-connect\n`]);
+          pendingLogsRef.current.push(`[System] No serial ports available for auto-connect\n`);
         }
       } catch (err:any) {
         console.error("Auto-connect error:", err);
-        setLogs(prev => [...prev, `Auto-connect error: ${err?.message || err}\n`]);
+        pendingLogsRef.current.push(`Auto-connect error: ${err?.message || err}\n`);
       }
     })();
   }, [readLoop, send]);
@@ -815,7 +867,6 @@ export function useSerial() {
 
   return {
     connected,
-    simulator,
     deviceInfo,
     lastSent,
     uartConfigs,
@@ -825,9 +876,12 @@ export function useSerial() {
     gpsData,
     receiverSettings,
     gpsSettings,
+    batteryConfig,
+    motorConfig,
+    motorState,
     servoConfigs,
+    moduleStates,
     connect,
-    connectSimulator,
     disconnect,
     send,
     reboot

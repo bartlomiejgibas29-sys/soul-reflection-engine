@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Cpu, RefreshCw, Trash2, Battery, Signal, Gauge, Download, Upload, ShieldAlert, Car } from "lucide-react";
+import { Cpu, RefreshCw, Trash2, Battery, Signal, Gauge, Download, Upload, ShieldAlert, Car, Satellite } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,11 +13,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import type { GpsData } from "@/hooks/useSerial";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import type { GpsData, ModuleStates } from "@/hooks/useSerial";
 
 interface SetupPageProps {
   uartConfigs: any[];
   gpsData?: GpsData | null;
+  moduleStates?: ModuleStates;
   onSend: (cmd: string) => Promise<void> | void;
   onReboot: () => Promise<void> | void;
 }
@@ -29,19 +32,35 @@ const InfoRow = ({ label, value, valueColor }: { label: string; value: string; v
   </div>
 );
 
-const SetupPage = ({ uartConfigs, gpsData, onSend, onReboot }: SetupPageProps) => {
+const SetupPage = ({ uartConfigs, gpsData, moduleStates, onSend, onReboot }: SetupPageProps) => {
   useEffect(() => {
-    onSend("ENABLE_GPS_MODE");
+    onSend("MODULE_STATUS");
     const t = setTimeout(() => onSend("GPS_SETTINGS"), 300);
     return () => {
       clearTimeout(t);
-      onSend("DISABLE_GPS_MODE");
     };
   }, []);
+
+  const handleGpsToggle = (enabled: boolean) => {
+    const command = enabled ? "SET_GPS_MODULE:1" : "SET_GPS_MODULE:0";
+    void Promise.resolve(onSend(command));
+  };
   return (
-    <div className="flex flex-col h-full gap-5 overflow-y-auto">
-      {/* Top row: System actions + Backup */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="flex flex-col h-full gap-5 overflow-y-auto pb-4">
+      <div className="flex flex-col gap-3 rounded-3xl border border-border/40 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.10),_transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.25em] text-primary/80">BetaDrive</p>
+            <h2 className="mt-1 text-2xl font-semibold text-foreground">Setup</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              Centralny panel systemu, modułów i podstawowych statusów pojazdu.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Top row: System actions + Backup + Modules */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* System Actions */}
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
@@ -115,12 +134,35 @@ const SetupPage = ({ uartConfigs, gpsData, onSend, onReboot }: SetupPageProps) =
             </div>
           </div>
         </div>
+
+        {/* Modules */}
+        <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
+            <Satellite size={14} className="text-primary" />
+            <span className="text-xs font-semibold text-foreground">Modules</span>
+          </div>
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Satellite size={16} className="text-foreground/70" />
+                <Label htmlFor="gps-module" className="text-sm font-medium text-foreground">
+                  GPS
+                </Label>
+              </div>
+              <Switch
+                id="gps-module"
+                checked={moduleStates?.gps ?? true}
+                onCheckedChange={handleGpsToggle}
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Bottom row: Car visualization + Info panels */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 min-h-0">
         {/* Car visualization placeholder */}
-        <div className="md:col-span-2 bg-card border border-border rounded-lg overflow-hidden flex flex-col">
+        <div className="md:col-span-2 rounded-2xl border border-border/40 bg-background/40 shadow-[0_10px_30px_rgba(0,0,0,0.2)] overflow-hidden flex flex-col">
           <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border">
             <Car size={14} className="text-primary" />
             <span className="text-xs font-semibold text-foreground">Vehicle Overview</span>

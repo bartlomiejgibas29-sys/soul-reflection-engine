@@ -21,7 +21,9 @@ interface ServoPageProps {
 const CHANNELS = ["CH1", "CH2", "CH3", "CH4", "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12"];
 
 const mapRange = (x: number, in_min: number, in_max: number, out_min: number, out_max: number) => {
-  return ((x - in_min) * (out_max - out_min)) / (in_max - in_min) + out_min;
+  if (in_max === in_min) return out_min; // Avoid division by zero
+  const result = ((x - in_min) * (out_max - out_min)) / (in_max - in_min) + out_min;
+  return isNaN(result) ? out_min : result;
 };
 
 const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
@@ -60,16 +62,55 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
   // Initial load
   useEffect(() => {
     onSend("SERVO_TABLE");
+    
+    // Enable receiver mode for active control
+    onSend("ENABLE_RECEIVER_MODE");
   }, [onSend]);
 
   const getEffectiveConfig = (pin: number, local: Record<number, ServoConfig>): ServoConfig => {
       const defaultConfig: ServoConfig = {
-          pin, frequency: 50, minUs: 1000, midUs: 1500, maxUs: 2000,
+          pin, frequency: 50, minUs: 900, midUs: 1500, maxUs: 2100,
           sourceChannel: 0, reverse: false, rate: 1.0, speed: 0,
           mode: 0, minAngle: 0, maxAngle: 180, ranges: []
       };
-      return local[pin] || servoConfigs.find(c => c.pin === pin) || defaultConfig;
+      const cfg = local[pin] || servoConfigs.find(c => c.pin === pin) || defaultConfig;
+      // Sanitize config to prevent NaN/crashes
+      return {
+          ...cfg,
+          frequency: cfg.frequency || 50,
+          minUs: cfg.minUs || 900,
+          midUs: cfg.midUs || 1500,
+          maxUs: cfg.maxUs || 2100,
+          sourceChannel: cfg.sourceChannel || 0,
+          rate: isNaN(cfg.rate) ? 1.0 : cfg.rate,
+          speed: cfg.speed || 0,
+          mode: cfg.mode || 0,
+          minAngle: isNaN(cfg.minAngle) ? 0 : cfg.minAngle,
+          maxAngle: isNaN(cfg.maxAngle) ? 180 : cfg.maxAngle,
+          ranges: cfg.ranges || []
+      };
   };
+
+  const handleNumberInput = (value: string, callback: (num: number) => void) => {
+    if (value === "") {
+      callback(NaN);
+    } else {
+      const num = parseFloat(value);
+      if (!isNaN(num)) callback(num);
+    }
+  };
+
+  const renderNumberInput = (value: number, callback: (num: number) => void, className?: string, step?: string, max?: number, min?: number) => (
+    <Input
+      type="number"
+      step={step || "1"}
+      max={max}
+      min={min}
+      className={className}
+      value={isNaN(value) ? "" : value}
+      onChange={(e) => handleNumberInput(e.target.value, callback)}
+    />
+  );
 
   const handleUpdateConfig = (pin: number, updates: Partial<ServoConfig>) => {
     setLocalConfigs(prev => {
@@ -84,12 +125,40 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
   const handleSave = async (pin: number) => {
     const cfg = getEffectiveConfig(pin, localConfigs);
 
+    // Walidacja pól numerycznych
+    const fieldsToValidate = [
+      { name: 'Częstotliwość', val: cfg.frequency },
+      { name: 'Min Us', val: cfg.minUs },
+      { name: 'Mid Us', val: cfg.midUs },
+      { name: 'Max Us', val: cfg.maxUs },
+      { name: 'Rate', val: cfg.rate },
+      { name: 'Min Angle', val: cfg.minAngle },
+      { name: 'Max Angle', val: cfg.maxAngle }
+    ];
+
+    for (const field of fieldsToValidate) {
+      if (field.val === undefined || field.val === null || isNaN(field.val)) {
+        alert(`Pole "${field.name}" nie może być puste.`);
+        return;
+      }
+    }
+
+    if (cfg.ranges) {
+      for (let i = 0; i < cfg.ranges.length; i++) {
+        const r = cfg.ranges[i];
+        if (isNaN(r.minIn) || isNaN(r.maxIn) || isNaN(r.targetUs)) {
+          alert(`Zakres ${i + 1} zawiera nieprawidłowe lub puste dane.`);
+          return;
+        }
+      }
+    }
+
     // Send Main Config
-    // Format: SET_SERVO_CFG:pin:freq:min:mid:max:src:rev:rate:speed:mode:minAngle:maxAngle
-    const cmd = `SET_SERVO_CFG:${pin}:${cfg.frequency}:${cfg.minUs}:${cfg.midUs}:${cfg.maxUs}:${cfg.sourceChannel}:${cfg.reverse ? 1 : 0}:${cfg.rate}:${cfg.speed}:${cfg.mode}:${cfg.minAngle}:${cfg.maxAngle}`;
+    // Format: SET_SERVO_CFG:pin:freq:min:mid:max:src:rev:rate:speed:mode:minAngle:maxAngle:rangeCount
+    const cmd = `SET_SERVO_CFG:${pin}:${cfg.frequency}:${cfg.minUs}:${cfg.midUs}:${cfg.maxUs}:${cfg.sourceChannel}:${cfg.reverse ? 1 : 0}:${cfg.rate}:${cfg.speed}:${cfg.mode}:${cfg.minAngle}:${cfg.maxAngle}:${cfg.ranges?.length || 0}`;
     await onSend(cmd);
 
-    // Send Ranges if mode is RANGES (or always, to be safe)
+    // Send Ranges
     if (cfg.ranges) {
         for (let i = 0; i < cfg.ranges.length; i++) {
             const r = cfg.ranges[i];
@@ -161,13 +230,19 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
 
   return (
     <div className="h-full overflow-auto p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Activity className="text-primary" /> Konfiguracja Serwomechanizmów
-        </h2>
-        <Button variant="outline" size="sm" onClick={() => onSend("SERVO_TABLE")}>
-          <RefreshCw className="mr-2 h-4 w-4" /> Odśwież
-        </Button>
+      <div className="flex flex-col gap-3 rounded-3xl border border-border/40 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.10),_transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.25em] text-primary/80">BetaDrive</p>
+            <h2 className="mt-1 text-2xl font-semibold text-foreground">Servos</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              Konfiguracja serwomechanizmów, zakresów wejściowych i testów ruchu.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => onSend("SERVO_TABLE")} className="border-border/50 bg-background/70">
+            <RefreshCw className="mr-2 h-4 w-4" /> Odśwież
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -175,11 +250,11 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
           const cfg = getEffectiveConfig(pin, localConfigs);
           
           return (
-            <Card key={pin} className="flex flex-col">
+            <Card key={pin} className="flex flex-col border-border/40 bg-background/40 shadow-[0_10px_30px_rgba(0,0,0,0.15)]">
               <CardHeader className="pb-2 bg-muted/40">
                 <CardTitle className="text-sm font-medium flex justify-between items-center">
                   <span>Servo {idx + 1} (Pin {pin})</span>
-                  <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleSave(pin)}>
+                  <Button size="icon" variant="outline" className="h-8 w-8 rounded-full border-primary/20 bg-background/70 text-primary hover:bg-primary/10" onClick={() => handleSave(pin)}>
                     <Save className="h-4 w-4" />
                   </Button>
                 </CardTitle>
@@ -241,11 +316,7 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
                             <div className="flex gap-4">
                                 <div className="space-y-1 flex-1">
                                     <Label>Rate (Mnożnik)</Label>
-                                    <Input 
-                                        type="number" step="0.1" 
-                                        value={cfg.rate} 
-                                        onChange={(e) => handleUpdateConfig(pin, { rate: parseFloat(e.target.value) })} 
-                                    />
+                                    {renderNumberInput(cfg.rate, (num) => handleUpdateConfig(pin, { rate: num }), "w-full h-10 px-3", "0.1")}
                                 </div>
                                 <div className="space-y-1 flex items-end pb-2">
                                     <div className="flex items-center gap-2">
@@ -278,25 +349,13 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
                                             <TableRow key={rIdx}>
                                                 <TableCell className="p-2">
                                                     <div className="flex items-center gap-1">
-                                                        <Input 
-                                                            className="h-6 w-12 px-1 text-center" 
-                                                            value={rng.minIn} 
-                                                            onChange={(e) => updateRange(pin, rIdx, 'minIn', parseInt(e.target.value))}
-                                                        />
+                                                        {renderNumberInput(rng.minIn, (num) => updateRange(pin, rIdx, 'minIn', num), "h-8 w-20 px-2 text-center")}
                                                         <span>-</span>
-                                                        <Input 
-                                                            className="h-6 w-12 px-1 text-center" 
-                                                            value={rng.maxIn} 
-                                                            onChange={(e) => updateRange(pin, rIdx, 'maxIn', parseInt(e.target.value))}
-                                                        />
+                                                        {renderNumberInput(rng.maxIn, (num) => updateRange(pin, rIdx, 'maxIn', num), "h-8 w-20 px-2 text-center")}
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="p-2">
-                                                    <Input 
-                                                        className="h-6 w-14 px-1 text-center" 
-                                                        value={usToAngle(rng.targetUs, cfg)} 
-                                                        onChange={(e) => updateRange(pin, rIdx, 'targetUs', angleToUs(parseInt(e.target.value), cfg))}
-                                                    />
+                                                    {renderNumberInput(usToAngle(rng.targetUs, cfg), (num) => updateRange(pin, rIdx, 'targetUs', angleToUs(num, cfg)), "h-8 w-24 px-2 text-center", "1", 2500, 500)}
                                                 </TableCell>
                                                 <TableCell className="p-2">
                                                     <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => removeRange(pin, rIdx)}>
@@ -339,29 +398,29 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
                             <Label>Min Us</Label>
-                            <Input type="number" value={cfg.minUs} onChange={(e) => handleUpdateConfig(pin, { minUs: parseInt(e.target.value) })} />
+                            {renderNumberInput(cfg.minUs, (num) => handleUpdateConfig(pin, { minUs: num }), "w-full h-10 px-3", "1", 2500, 500)}
                         </div>
                         <div className="space-y-1">
                             <Label>Max Us</Label>
-                            <Input type="number" value={cfg.maxUs} onChange={(e) => handleUpdateConfig(pin, { maxUs: parseInt(e.target.value) })} />
+                            {renderNumberInput(cfg.maxUs, (num) => handleUpdateConfig(pin, { maxUs: num }), "w-full h-10 px-3", "1", 2500, 500)}
                         </div>
                         <div className="space-y-1">
                             <Label>Mid Us</Label>
-                            <Input type="number" value={cfg.midUs} onChange={(e) => handleUpdateConfig(pin, { midUs: parseInt(e.target.value) })} />
+                            {renderNumberInput(cfg.midUs, (num) => handleUpdateConfig(pin, { midUs: num }), "w-full h-10 px-3", "1", 2500, 500)}
                         </div>
                         <div className="space-y-1">
                             <Label>Speed (us/s)</Label>
-                            <Input type="number" value={cfg.speed} onChange={(e) => handleUpdateConfig(pin, { speed: parseInt(e.target.value) })} />
+                            {renderNumberInput(cfg.speed, (num) => handleUpdateConfig(pin, { speed: num }), "w-full h-10 px-3")}
                         </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4 border-t pt-4">
                         <div className="space-y-1">
                             <Label>Min Kąt (°)</Label>
-                            <Input type="number" value={cfg.minAngle} onChange={(e) => handleUpdateConfig(pin, { minAngle: parseInt(e.target.value) })} />
+                            {renderNumberInput(cfg.minAngle, (num) => handleUpdateConfig(pin, { minAngle: num }), "w-full h-10 px-3")}
                         </div>
                         <div className="space-y-1">
                             <Label>Max Kąt (°)</Label>
-                            <Input type="number" value={cfg.maxAngle} onChange={(e) => handleUpdateConfig(pin, { maxAngle: parseInt(e.target.value) })} />
+                            {renderNumberInput(cfg.maxAngle, (num) => handleUpdateConfig(pin, { maxAngle: num }), "w-full h-10 px-3")}
                         </div>
                     </div>
                   </TabsContent>
@@ -388,23 +447,44 @@ const ServoPage = ({ pinConfigs, servoConfigs, onSend }: ServoPageProps) => {
                     </div>
                     {testMode[pin] && (
                         <div className="space-y-4">
-                            <div className="flex justify-between text-sm">
-                                <span>{cfg.minAngle}°</span>
-                                <span className="font-bold text-primary">
-                                    {Math.round(mapRange(testVal[pin] ?? ((cfg.minAngle + cfg.maxAngle)/2), cfg.minAngle, cfg.maxAngle, cfg.minAngle, cfg.maxAngle))}°
-                                </span>
-                                <span>{cfg.maxAngle}°</span>
-                            </div>
-                            <Slider 
-                                min={cfg.minAngle} 
-                                max={cfg.maxAngle} 
-                                step={1} 
-                                value={[testVal[pin] ?? ((cfg.minAngle + cfg.maxAngle)/2)]} 
-                                onValueChange={(v) => handleTestMove(pin, v[0])} 
-                            />
-                            <div className="text-center text-xs text-muted-foreground">
-                                PWM: {Math.round(mapRange(testVal[pin] ?? ((cfg.minAngle + cfg.maxAngle)/2), cfg.minAngle, cfg.maxAngle, cfg.minUs, cfg.maxUs))} us
-                            </div>
+                            {(() => {
+                                // Ensure valid min/max for Slider component to prevent crash
+                                const rawMin = cfg.minAngle ?? 0;
+                                const rawMax = cfg.maxAngle ?? 180;
+                                let min = Math.min(rawMin, rawMax);
+                                let max = Math.max(rawMin, rawMax);
+                                
+                                // Prevent invalid range or single point slider if possible
+                                if (isNaN(min)) min = 0;
+                                if (isNaN(max)) max = 180;
+                                if (min >= max) {
+                                   max = min + 1;
+                                }
+
+                                const currentVal = testVal[pin] ?? ((min + max) / 2);
+                                const safeVal = isNaN(currentVal) ? min : Math.max(min, Math.min(max, currentVal));
+                                const currentUs = Math.round(mapRange(safeVal, cfg.minAngle, cfg.maxAngle, cfg.minUs, cfg.maxUs));
+
+                                return (
+                                    <>
+                                        <div className="flex justify-between text-sm">
+                                            <span>{min}°</span>
+                                            <span className="font-bold text-primary">{Math.round(safeVal)}°</span>
+                                            <span>{max}°</span>
+                                        </div>
+                                        <Slider 
+                                            min={min} 
+                                            max={max} 
+                                            step={1} 
+                                            value={[safeVal]} 
+                                            onValueChange={(v) => handleTestMove(pin, v[0])} 
+                                        />
+                                        <div className="text-center text-xs text-muted-foreground">
+                                            PWM: {isNaN(currentUs) ? "---" : currentUs} us
+                                        </div>
+                                    </>
+                                );
+                            })()}
                         </div>
                     )}
                   </TabsContent>

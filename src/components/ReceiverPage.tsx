@@ -36,7 +36,6 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
   useEffect(() => {
     onSendRef.current("ENABLE_RECEIVER_MODE");
     onSendRef.current("RX_SETTINGS");
-    return () => { onSendRef.current("DISABLE_RECEIVER_MODE"); };
   }, []);
 
   const [form, setForm] = useState<ReceiverSettings | null>(null);
@@ -215,10 +214,21 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
 
   return (
     <div className="flex flex-col h-full gap-4 overflow-y-auto pb-16">
+      <div className="flex flex-col gap-3 rounded-3xl border border-border/40 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.10),_transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.25em] text-primary/80">BetaDrive</p>
+            <h2 className="mt-1 text-2xl font-semibold text-foreground">Receiver</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              Monitor kanałów RC i konfiguracja trybu jazdy oraz korekt odbiornika.
+            </p>
+          </div>
+        </div>
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
         
         {/* LEFT: Channel Monitor */}
-        <div className="lg:col-span-2 bg-card border border-border rounded-lg overflow-hidden flex flex-col">
+        <div className="lg:col-span-2 rounded-2xl border border-border/40 bg-background/40 shadow-[0_10px_30px_rgba(0,0,0,0.2)] overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
             <div className="flex items-center gap-2">
               <Gamepad2 size={14} className="text-primary" />
@@ -529,7 +539,7 @@ const ReceiverPage = ({ data, settings, onSend }: ReceiverPageProps) => {
               </div>
               <div className="pt-2 flex justify-end">
                 <Button
-                  className="h-9 px-8 bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs gap-2 shadow-lg shadow-primary/20 rounded-md"
+                  className="h-10 px-8 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs gap-2 shadow-lg shadow-primary/20"
                   onClick={handleSaveAll}
                 >
                   <SaveIcon size={14} />

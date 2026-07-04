@@ -4,7 +4,7 @@ void handleReceiverLoop() {
     // --- RECEIVER (ELRS) ---
     if (receiverMode) {
         crsf.update();
-        if (millis() - lastCrsfUpdate > 50) {
+        if (receiverTelemetry && millis() - lastCrsfUpdate > 50) {
             lastCrsfUpdate = millis();
             const crsfLinkStatistics_t* link = crsf.getLinkStatistics(); 
         

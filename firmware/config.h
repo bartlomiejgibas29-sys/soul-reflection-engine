@@ -58,9 +58,12 @@ extern bool gps_galileo;
 extern bool gps_home_once;
 extern String gps_ground_assist;
 extern float gps_mag_declination;
+extern bool gps_module_enabled;
 extern bool gpsMode;
 extern unsigned long lastGpsUpdate;
 extern unsigned long lastSatUpdate;
+extern bool gpsTelemetry;
+extern bool receiverTelemetry;
 extern bool receiverMode;
 extern unsigned long lastCrsfUpdate;
 
@@ -104,11 +107,50 @@ struct ServoConfig {
 #define MAX_SERVOS 6
 extern ServoConfig servoConfigs[MAX_SERVOS];
 extern int servoCount;
+extern uint8_t pinModeArr[22];
+extern int pinValArr[22];
+
+// --- Motor Configuration (BTS7960) ---
+extern int motor_rpwm_pin;
+extern int motor_lpwm_pin;
+extern int motor_en_pin;
+extern int motor_pwm_freq;
+extern int motor_max_pwm_percent;
+extern int motor_startup_pwm_percent;
+extern int motor_ramp_up_ms;
+extern int motor_ramp_down_ms;
+extern int motor_direction_change_ms;
+extern int motor_direction_smoothing;
+extern bool motor_configured;
+extern bool motor_live_test_active;
+extern bool motor_failsafe_triggered;
+extern bool motorTelemetry;
+extern int motor_live_target_percent;
+extern float motor_current_output_percent;
 
 // --- Pin configuration ---
 void initPinConfig();
 void reportAllPins();
 void reportServoConfigs(); // Added declaration
 int findServoIdx(int pin);
+
+// --- Steering configuration ---
+void initSteering();
+void handleSteering();
+
+// --- Throttle configuration ---
+void initThrottle();
+void handleThrottle();
+
+// --- Motor configuration ---
+void initMotorDriver();
+void handleMotorLoop();
+void reportMotorConfig();
+void reportMotorState();
+void emergencyStopMotor(bool reportState = true);
+bool processTextMotorCommand(const String& cmd);
+bool isMotorPinReserved(int pin);
+const char* getMotorPinRole(int pin);
+bool isAnyMotorPinSelected(int pin);
 
 #endif

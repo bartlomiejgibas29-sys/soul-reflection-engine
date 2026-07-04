@@ -1,4 +1,4 @@
-import { Usb, Unplug, Rocket, Cpu } from "lucide-react";
+import { Usb, Unplug, Rocket } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   Select,
@@ -11,14 +11,12 @@ import { Switch } from "@/components/ui/switch";
 
 interface TopHeaderProps {
   connected: boolean;
-  simulator?: boolean;
   deviceInfo: { configurator?: string; firmware?: string; target?: string } | null;
   onConnect: (baudRate: number) => void;
-  onConnectSimulator?: () => void;
   onDisconnect: () => void;
 }
 
-const TopHeader = ({ connected, simulator, deviceInfo, onConnect, onConnectSimulator, onDisconnect }: TopHeaderProps) => {
+const TopHeader = ({ connected, deviceInfo, onConnect, onDisconnect }: TopHeaderProps) => {
   const [baudRate, setBaudRate] = useState("115200");
   const [autoConnect, setAutoConnect] = useState(false);
 
@@ -50,11 +48,6 @@ const TopHeader = ({ connected, simulator, deviceInfo, onConnect, onConnectSimul
             {deviceInfo.firmware && <div>Firmware: {deviceInfo.firmware}</div>}
             {deviceInfo.target && <div>Target: {deviceInfo.target}</div>}
           </div>
-        )}
-        {connected && simulator && (
-          <span className="ml-2 px-2 py-0.5 rounded-sm bg-primary/15 text-primary text-[10px] font-bold tracking-wider uppercase border border-primary/30">
-            Simulator
-          </span>
         )}
         {!connected && (
           <div className="text-xs text-muted-foreground">Not connected</div>
@@ -98,29 +91,15 @@ const TopHeader = ({ connected, simulator, deviceInfo, onConnect, onConnectSimul
             <span className="text-[10px]">Disconnect</span>
           </button>
         ) : (
-          <>
-            <button
-              onClick={() => onConnect(parseInt(baudRate))}
-              className="flex flex-col items-center text-primary hover:text-primary/80 transition-colors"
-            >
-              <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                <Usb size={16} className="text-primary-foreground" />
-              </div>
-              <span className="text-[10px]">Connect</span>
-            </button>
-            {onConnectSimulator && (
-              <button
-                onClick={onConnectSimulator}
-                title="Start virtual device (no hardware required)"
-                className="flex flex-col items-center text-foreground hover:text-primary transition-colors"
-              >
-                <div className="w-8 h-8 rounded-full bg-secondary border border-border flex items-center justify-center">
-                  <Cpu size={16} className="text-foreground" />
-                </div>
-                <span className="text-[10px]">Simulator</span>
-              </button>
-            )}
-          </>
+          <button
+            onClick={() => onConnect(parseInt(baudRate))}
+            className="flex flex-col items-center text-primary hover:text-primary/80 transition-colors"
+          >
+            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+              <Usb size={16} className="text-primary-foreground" />
+            </div>
+            <span className="text-[10px]">Connect</span>
+          </button>
         )}
       </div>
     </header>

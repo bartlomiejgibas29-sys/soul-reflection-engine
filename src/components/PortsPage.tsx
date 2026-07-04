@@ -30,6 +30,11 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
     }
   }, [uartConfigs, localConfigs.length]);
 
+  // Enable Receiver Mode on mount to keep servos active
+  useEffect(() => {
+      onSend("ENABLE_RECEIVER_MODE");
+  }, []);
+
   const update = (id: number, key: keyof UartConfig, value: any) => {
     setLocalConfigs((prev) =>
       prev.map(c => {
@@ -102,9 +107,21 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4 pb-4">
+      <div className="flex flex-col gap-3 rounded-3xl border border-border/40 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.10),_transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.25em] text-primary/80">BetaDrive</p>
+            <h2 className="mt-1 text-2xl font-semibold text-foreground">Ports</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              Konfiguracja portów UART, pinów i typu komunikacji dla modułów urządzenia.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Header bar */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div className="rounded-2xl border border-border/40 bg-background/40 shadow-[0_10px_30px_rgba(0,0,0,0.2)] overflow-hidden">
         <div className="flex flex-wrap justify-between items-center gap-3 px-4 py-2.5">
           <div className="flex items-center gap-2">
             <Cable size={14} className="text-primary" />
@@ -244,7 +261,7 @@ const PortsPage = ({ uartConfigs, connected, onSend }: PortsPageProps) => {
       {/* Save button */}
       <div className="flex justify-end">
         <Button
-          className="h-9 px-8 bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs gap-2 shadow-lg shadow-primary/20"
+          className="h-10 px-8 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 font-bold text-xs gap-2 shadow-lg shadow-primary/20"
           onClick={handleSave}
         >
           <Save size={14} />

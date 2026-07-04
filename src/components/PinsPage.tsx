@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { Cpu, RefreshCw, AlertTriangle, Lightbulb, Activity, Ban, Save } from "lucide-react";
+import { Cpu, RefreshCw, AlertTriangle, Lightbulb, Activity, Ban, Save, Battery, Gauge, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { UartConfig, PinConfig } from "@/hooks/useSerial";
+import type { UartConfig, PinConfig, MotorConfig } from "@/hooks/useSerial";
+import { getPinReservationState } from "@/lib/pinReservations";
 
 // Definicja pinów dla ESP32-C3
 const AVAILABLE_PINS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 21];
@@ -14,10 +15,11 @@ const RESERVED_USB_PINS = [20, 21];
 interface PinsPageProps {
   uartConfigs: UartConfig[];
   pinConfigs: PinConfig[];
+  motorConfig: MotorConfig | null;
   onSend: (data: string) => Promise<void> | void;
 }
 
-const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
+const PinsPage = ({ uartConfigs, pinConfigs, motorConfig, onSend }: PinsPageProps) => {
   const [localConfigs, setLocalConfigs] = useState<Record<number, PinConfig>>({});
   const [pendingChanges, setPendingChanges] = useState<Record<number, string>>({});
 
@@ -35,6 +37,10 @@ const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
   // Pobranie aktualnej konfiguracji przy montowaniu
   useEffect(() => {
     onSend("PIN_TABLE");
+    onSend("MOTOR_PINS");
+    
+    // Włącz tryb odbiornika, aby sterowanie działało w tle
+    onSend("ENABLE_RECEIVER_MODE");
   }, []);
 
   const handleModeChange = (pin: number, mode: string) => {
@@ -77,36 +83,31 @@ const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
   };
 
   const getPinStatus = (pin: number) => {
-    if (RESERVED_USB_PINS.includes(pin)) {
-      return {
-        locked: true,
-        reason: "Reserved for USB/programming (GPIO 20/21)"
-      };
-    }
-
-    // Sprawdź czy pin jest używany przez UART
-    const uartUsage = uartConfigs.find(u => u.enabled && (u.rx === pin || u.tx === pin));
-    if (uartUsage) {
-      return {
-        locked: true,
-        reason: `Used by UART ${uartUsage.id} (${uartUsage.type})`
-      };
-    }
-    return { locked: false, reason: "" };
+    return getPinReservationState({
+      pin,
+      uartConfigs,
+      pinConfigs,
+      motorConfig,
+      reservedUsbPins: RESERVED_USB_PINS,
+    });
   };
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4 relative">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Cpu className="text-primary" />
-          <h2 className="text-lg font-semibold">Pin Configuration</h2>
+      <div className="flex flex-col gap-3 rounded-3xl border border-border/40 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.10),_transparent_35%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01))] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.25em] text-primary/80">BetaDrive</p>
+            <h2 className="mt-1 text-2xl font-semibold text-foreground">Pins</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              Przypisywanie funkcji do pinów GPIO i kontrola konfliktów z UART oraz motorem.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => onSend("PIN_TABLE")} className="border-border/50 bg-background/70">
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
         </div>
-        <Button variant="outline" size="sm" onClick={() => onSend("PIN_TABLE")}>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Refresh
-        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -118,7 +119,7 @@ const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
           const hasChange = !!pendingMode;
           
           return (
-            <Card key={pin} className={`p-4 border ${status.locked ? 'bg-muted/50 border-muted' : hasChange ? 'border-primary/50 bg-primary/5' : 'border-border'}`}>
+            <Card key={pin} className={`p-4 border ${status.locked ? 'bg-muted/50 border-muted' : hasChange ? 'border-primary/50 bg-primary/5' : 'border-border/40 bg-background/40 shadow-[0_10px_30px_rgba(0,0,0,0.15)]'}`}>
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -139,6 +140,9 @@ const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
                       <div className="flex items-center gap-1">
                         {displayMode === "LIGHT" && <Lightbulb size={14} className="text-yellow-500" />}
                         {displayMode === "SERVO" && <Activity size={14} className="text-blue-500" />}
+                        {displayMode === "STEERING" && <Gauge size={14} className="text-purple-500" />}
+                        {displayMode === "BATTERY" && <Battery size={14} className="text-green-500" />}
+                        {displayMode === "MOTOR" && <Zap size={14} className="text-orange-400" />}
                         {displayMode === "DISABLED" && <Ban size={14} className="text-muted-foreground" />}
                       </div>
                       {hasChange && (
@@ -172,6 +176,7 @@ const PinsPage = ({ uartConfigs, pinConfigs, onSend }: PinsPageProps) => {
                       <SelectItem value="LIGHT">Light Output</SelectItem>
                       <SelectItem value="SERVO">Servo Output</SelectItem>
                       <SelectItem value="STEERING">Steering</SelectItem>
+                      <SelectItem value="BATTERY">Battery Input</SelectItem>
                     </SelectContent>
                   </Select>
                 )}

@@ -29,6 +29,12 @@ bool isPinAvailable(int pin, const char* label) {
         }
     }
 
+    // 2b. Blokada pinów już przypisanych do napędu
+    if (isMotorPinReserved(pin)) {
+        Serial.printf("!!! BLAD: Pin %d jest zarezerwowany dla %s!\n", pin, getMotorPinRole(pin));
+        return false;
+    }
+
     // 3. Zakres fizyczny pinów ESP32-C3
     if (pin < 0 || pin > 10 && pin < 18 || pin > 21) {
         Serial.printf("!!! BLAD: Pin %d nie istnieje w ESP32-C3!\n", pin);
@@ -90,6 +96,8 @@ void saveFloat(const char* key, float newVal, float &currentVar) {
 }
 
 // --- HELPERY DO RESTARTU PORTÓW ---
+#include "battery.h"
+
 void restartUART1() {
     Serial1.end();
     if (u1_enabled && u1_rx != -1 && u1_tx != -1) {
@@ -173,6 +181,9 @@ static void applyPinRuntime(int pin, uint8_t mode, int value) {
     } else if (mode == 3) {
         pinMode(pin, OUTPUT);
         digitalWrite(pin, LOW);
+    } else if (mode == 4) {
+        // BATTERY INPUT
+        pinMode(pin, INPUT);
     }
 }
 
@@ -206,10 +217,15 @@ void reportAllPins() {
     for (unsigned i = 0; i < sizeof(pinsToInit)/sizeof(pinsToInit[0]); i++) {
         int p = pinsToInit[i];
         const char* modeStr = "DISABLED";
-        if (pinModeArr[p] == 1) modeStr = "LIGHT";
+        int value = pinValArr[p];
+        if (isMotorPinReserved(p)) {
+            modeStr = "MOTOR";
+            value = 0;
+        } else if (pinModeArr[p] == 1) modeStr = "LIGHT";
         else if (pinModeArr[p] == 2) modeStr = "SERVO";
         else if (pinModeArr[p] == 3) modeStr = "STEERING";
-        Serial.printf("PIN_CONF,%d,%s,%d\n", p, modeStr, pinValArr[p]);
+        else if (pinModeArr[p] == 4) modeStr = "BATTERY";
+        Serial.printf("PIN_CONF,%d,%s,%d\n", p, modeStr, value);
     }
 }
 
@@ -230,6 +246,7 @@ static void setPinModeCommand(int pin, const String& modeStr, int valueOpt, bool
     if ((pin == u1_rx || pin == u1_tx) && u1_enabled) { Serial.printf("PIN_CONF,%d,%s,%d\n", pin, "DISABLED", 0); return; }
     if ((pin == u2_rx || pin == u2_tx) && u2_enabled) { Serial.printf("PIN_CONF,%d,%s,%d\n", pin, "DISABLED", 0); return; }
     if ((pin == u3_rx || pin == u3_tx) && u3_enabled) { Serial.printf("PIN_CONF,%d,%s,%d\n", pin, "DISABLED", 0); return; }
+    if (isMotorPinReserved(pin)) { Serial.printf("PIN_CONF,%d,%s,%d\n", pin, "MOTOR", 0); return; }
 
     uint8_t prevMode = pinModeArr[pin];
     uint8_t m = 0;
@@ -237,6 +254,7 @@ static void setPinModeCommand(int pin, const String& modeStr, int valueOpt, bool
     else if (modeStr == "LIGHT") m = 1;
     else if (modeStr == "SERVO") m = 2;
     else if (modeStr == "STEERING") m = 3;
+    else if (modeStr == "BATTERY") m = 4;
 
     int v = hasValue ? valueOpt : 0;
 
@@ -250,6 +268,22 @@ static void setPinModeCommand(int pin, const String& modeStr, int valueOpt, bool
                 Serial.printf("PIN_CONF,%d,DISABLED,0\n", i);
             }
         }
+    }
+    
+    // Check if BATTERY is already assigned to another pin
+    if (m == 4) {
+        for (int i = 0; i < 22; i++) {
+            if (pinModeArr[i] == 4 && i != pin) {
+                pinModeArr[i] = 0;
+                pinValArr[i] = 0;
+                applyPinRuntime(i, 0, 0);
+                persistPin(i);
+                Serial.printf("PIN_CONF,%d,DISABLED,0\n", i);
+            }
+        }
+        setBatteryPin(pin);
+    } else if (prevMode == 4 && m != 4) {
+        setBatteryPin(-1);
     }
 
     pinModeArr[pin] = m;
@@ -265,6 +299,7 @@ static void setPinModeCommand(int pin, const String& modeStr, int valueOpt, bool
     if (m == 1) ms = "LIGHT";
     else if (m == 2) ms = "SERVO";
     else if (m == 3) ms = "STEERING";
+    else if (m == 4) ms = "BATTERY";
     Serial.printf("PIN_CONF,%d,%s,%d\n", pin, ms, v);
 }
 
@@ -347,14 +382,14 @@ static void setPinModeCommand(String cmd) {
     setPinModeCommand(pin, mode, val, (c3 != -1));
 }
 
-// Report servo configs: SERVO_CFG,pin,freq,minUs,midUs,maxUs,src,reverse,rate,speed
+// Report servo configs: SERVO_CFG,pin,freq,minUs,midUs,maxUs,src,reverse,rate,speed,mode,minA,maxA,rngCnt
 void reportServoConfigs() {
     for (int i = 0; i < servoCount; i++) {
         ServoConfig &c = servoConfigs[i];
-        Serial.printf("SERVO_CFG,%d,%d,%d,%d,%d,%d,%d,%.2f,%d,%d,%d,%d\n",
+        Serial.printf("SERVO_CFG,%d,%d,%d,%d,%d,%d,%d,%.2f,%d,%d,%d,%d,%d\n",
             c.pin, c.frequency, c.minUs, c.midUs, c.maxUs,
             c.sourceChannel, c.reverse ? 1 : 0, c.rate, c.speed,
-            c.mode, c.minAngle, c.maxAngle);
+            c.mode, c.minAngle, c.maxAngle, c.rangeCount);
         // Report ranges if present
         for(int r=0; r<c.rangeCount; r++) {
             Serial.printf("SERVO_RNG,%d,%d,%d,%d,%d\n", c.pin, r, c.ranges[r].minIn, c.ranges[r].maxIn, c.ranges[r].targetUs);
@@ -363,8 +398,8 @@ void reportServoConfigs() {
 }
 
 void setServoConfigCommand(String cmd) {
-    // Format: SET_SERVO_CFG:pin:freq:min:mid:max:src:rev:rate:speed:mode:minAngle:maxAngle
-    String parts[16]; // Increased size for new fields
+    // Format: SET_SERVO_CFG:pin:freq:min:mid:max:src:rev:rate:speed:mode:minAngle:maxAngle:rangeCount
+    String parts[16]; 
     int count = 0;
     int lastPos = 0;
     for (int i = 0; i < 16; i++) {
@@ -412,16 +447,20 @@ void setServoConfigCommand(String cmd) {
     c.rate = parts[8].toFloat();
     c.speed = parts[9].toInt();
     
-    // New fields (optional for backward compatibility)
+    // New fields
     if (count >= 13) {
         c.mode = parts[10].toInt();
         c.minAngle = parts[11].toInt();
         c.maxAngle = parts[12].toInt();
     } else {
-        // Defaults if old format
         c.mode = 0;
         c.minAngle = 0;
         c.maxAngle = 180;
+    }
+
+    if (count >= 14) {
+        c.rangeCount = parts[13].toInt();
+        if (c.rangeCount > 5) c.rangeCount = 5;
     }
 
     if (c.frequency < 10) c.frequency = 50;
@@ -446,7 +485,6 @@ void setServoConfigCommand(String cmd) {
 
     persistServo(idx);
     applyPinRuntime(pin, 2, 0);
-    // Reporting is handled inside persistServo now (to include ranges)
 }
 
 void setServoRangeCommand(String cmd) {
@@ -498,6 +536,50 @@ void configureGps();
 
 String commandBuf = "";
 
+static bool hasGpsPortConfigured() {
+    return (u1_enabled && u1_type == "GPS" && u1_rx != -1 && u1_tx != -1) ||
+           (u2_enabled && u2_type == "GPS" && u2_rx != -1 && u2_tx != -1) ||
+           (u3_enabled && u3_type == "GPS" && u3_rx != -1 && u3_tx != -1);
+}
+
+static bool hasReceiverPortConfigured() {
+    return (u1_enabled && u1_type == "RECEIVER" && u1_rx != -1 && u1_tx != -1) ||
+           (u2_enabled && u2_type == "RECEIVER" && u2_rx != -1 && u2_tx != -1) ||
+           (u3_enabled && u3_type == "RECEIVER" && u3_rx != -1 && u3_tx != -1) ||
+           receiverMode;
+}
+
+static void reportModuleStatus() {
+    Serial.printf("MODULE_STATUS,GPS,%d\n", gps_module_enabled ? 1 : 0);
+    Serial.printf("MODULE_STATUS,RECEIVER,%d\n", hasReceiverPortConfigured() ? 1 : 0);
+}
+
+static void setGpsModuleEnabled(bool enabled) {
+    prefs.begin("sys_config", false);
+    prefs.putBool("gps_mod_en", enabled);
+    prefs.end();
+
+    gps_module_enabled = enabled;
+
+    if (!enabled) {
+        gpsMode = false;
+        gpsTelemetry = false;
+        satCount = 0;
+        Serial.println(">> GPS module DISABLED");
+    } else {
+        if (hasGpsPortConfigured()) {
+            gpsMode = true;
+            configureGps();
+            Serial.println(">> GPS module ENABLED");
+        } else {
+            gpsMode = false;
+            Serial.println(">> GPS module ENABLED (waiting for GPS UART)");
+        }
+    }
+
+    reportModuleStatus();
+}
+
 void handleCommands() {
     while (Serial.available() > 0) {
         char c = Serial.read();
@@ -517,6 +599,12 @@ void processCommand(String cmd) {
     cmd.trim();
     if (cmd.length() == 0) return;
     Serial.println("> Komenda: " + cmd);
+
+    if (cmd.startsWith("MOTOR_") || cmd.startsWith("SET_MOTOR_")) {
+        if (processTextMotorCommand(cmd)) {
+            return;
+        }
+    }
 
     if (cmd == "HARD RESET") {
         Serial.println("!!! CZYSZCZENIE PAMIECI I REBOOT !!!");
@@ -552,6 +640,7 @@ void processCommand(String cmd) {
     }
     else if (cmd == "FULL_CONFIG") {
         Serial.println("DEVICE,esp32c3,1.0.0");
+        reportBatteryConfig();
         Serial.printf("UART_CONF,1,%s,%d,%d,%ld,%s\n", u1_enabled?"ENABLED":"DISABLED", u1_rx, u1_tx, u1_baud, u1_type.c_str());
         Serial.printf("UART_CONF,2,%s,%d,%d,%ld,%s\n", u2_enabled?"ENABLED":"DISABLED", u2_rx, u2_tx, u2_baud, u2_type.c_str());
         Serial.printf("UART_CONF,3,%s,%d,%d,%ld,%s\n", u3_enabled?"ENABLED":"DISABLED", u3_rx, u3_tx, u3_baud, u3_type.c_str());
@@ -580,7 +669,13 @@ void processCommand(String cmd) {
         Serial.print(gps_home_once ? 1 : 0); Serial.print(",");
         Serial.print(gps_ground_assist); Serial.print(",");
         Serial.println(gps_mag_declination);
+        reportModuleStatus();
         reportServoConfigs();
+        reportMotorConfig();
+        reportMotorState();
+    }
+    else if (cmd == "MODULE_STATUS") {
+        reportModuleStatus();
     }
     else if (cmd == "RX_SETTINGS") {
         Serial.print("RX_SETTINGS,");
@@ -610,6 +705,12 @@ void processCommand(String cmd) {
         Serial.print(gps_home_once ? 1 : 0); Serial.print(",");
         Serial.print(gps_ground_assist); Serial.print(",");
         Serial.println(gps_mag_declination);
+    }
+    else if (cmd == "MOTOR_CONFIG") {
+        reportMotorConfig();
+    }
+    else if (cmd == "MOTOR_STATE") {
+        reportMotorState();
     }
     else if (cmd.startsWith("SET_UART1_RX:")) { savePin("u1_rx", cmd.substring(13).toInt(), u1_rx); restartUART1(); }
     else if (cmd.startsWith("SET_UART1_TX:")) { savePin("u1_tx", cmd.substring(13).toInt(), u1_tx); restartUART1(); }
@@ -646,6 +747,24 @@ void processCommand(String cmd) {
     else if (cmd.startsWith("SET_GPS_HOME_ONCE:")) { saveEnabled("gps_home_once", cmd.substring(18).toInt() == 1, gps_home_once); }
     else if (cmd.startsWith("SET_GPS_GROUND_ASSIST:")) { saveType("gps_assist", cmd.substring(22), gps_ground_assist); }
     else if (cmd.startsWith("SET_GPS_MAG_DECLINATION:")) { saveFloat("gps_mag", cmd.substring(24).toFloat(), gps_mag_declination); }
+    else if (cmd.startsWith("SET_GPS_MODULE:")) { setGpsModuleEnabled(cmd.substring(15).toInt() == 1); }
+    else if (cmd == "GET_BATTERY_CONFIG") { reportBatteryConfig(); }
+    else if (cmd.startsWith("SET_BATTERY_CONFIG:")) {
+        // SET_BATTERY_CONFIG:cells:r1:r2
+        int c1 = cmd.indexOf(':');
+        int c2 = cmd.indexOf(':', c1 + 1);
+        int c3 = cmd.indexOf(':', c2 + 1);
+        if (c2 != -1 && c3 != -1) {
+            int cells = cmd.substring(c1 + 1, c2).toInt();
+            float r1 = cmd.substring(c2 + 1, c3).toFloat();
+            float r2 = cmd.substring(c3 + 1).toFloat();
+            setBatteryConfig(cells, r1, r2);
+        }
+    }
+    else if (cmd.startsWith("CALIBRATE_BATTERY:")) {
+        float voltage = cmd.substring(18).toFloat();
+        setBatteryCalibration(voltage);
+    }
     else if (cmd == "DISABLE_UART1") {
         saveEnabled("u1_en", false, u1_enabled);
         u1_rx = -1; u1_tx = -1;
@@ -703,116 +822,103 @@ void processCommand(String cmd) {
     else if (cmd == "ENABLE_RECEIVER_MODE") {
         // Sprawdzamy czy UART1 jest zajęty i NIE jest Receiverem
         if (u1_enabled && u1_type != "RECEIVER") {
-            // Próbujemy przenieść konfigurację UART1 na wolny port (U2 lub U3)
             int targetPort = -1;
             if (!u2_enabled) targetPort = 2;
             else if (!u3_enabled) targetPort = 3;
 
             if (targetPort != -1) {
-                // Przenosimy ustawienia
                 long newBaud = u1_baud;
-                if (newBaud > 115200) newBaud = 115200; // Limit dla SoftwareSerial
-
+                if (newBaud > 115200) newBaud = 115200;
                 if (targetPort == 2) {
                     saveEnabled("u2_en", true, u2_enabled);
-                    // Zapisujemy typ i baudrate dla U2 (kopiujemy z U1)
                     prefs.begin("sys_config", false);
                     prefs.putString("u2_type", u1_type);
                     prefs.putLong("u2_baud", newBaud);
                     prefs.end();
-                    u2_type = u1_type;
-                    u2_baud = newBaud;
+                    u2_type = u1_type; u2_baud = newBaud;
                     restartUART2();
-                    Serial.printf(">> MOVED UART1 config to UART2 (Baud: %ld)\n", newBaud);
                 } else {
                     saveEnabled("u3_en", true, u3_enabled);
-                    // Zapisujemy typ i baudrate dla U3
                     prefs.begin("sys_config", false);
                     prefs.putString("u3_type", u1_type);
                     prefs.putLong("u3_baud", newBaud);
                     prefs.end();
-                    u3_type = u1_type;
-                    u3_baud = newBaud;
+                    u3_type = u1_type; u3_baud = newBaud;
                     restartUART3();
-                    Serial.printf(">> MOVED UART1 config to UART3 (Baud: %ld)\n", newBaud);
                 }
-            } else {
-                Serial.println(">> WARN: No free UART to move existing UART1 config!");
             }
         }
-
-        // Konfigurujemy UART1 jako Receiver (CRSF)
-        int rx = u1_rx; 
-        int tx = u1_tx;
-        
-        // Jeśli piny są nieprawidłowe (-1), przywracamy domyślne dla U1 (4/5) lub inne znane
-        if (rx == -1 || tx == -1) {
-             rx = 4; tx = 5; // Domyślne dla U1 w tym projekcie (z configu)
-             // Zapisujemy je
-             savePin("u1_rx", rx, u1_rx);
-             savePin("u1_tx", tx, u1_tx);
-        }
-
-        // Wymuszamy typ RECEIVER na U1
+        int rx = u1_rx; int tx = u1_tx;
+        if (rx == -1 || tx == -1) { rx = 4; tx = 5; savePin("u1_rx", rx, u1_rx); savePin("u1_tx", tx, u1_tx); }
         prefs.begin("sys_config", false);
         prefs.putString("u1_type", "RECEIVER");
-        prefs.putLong("u1_baud", 420000); // CRSF baud
+        prefs.putLong("u1_baud", 420000);
         prefs.end();
-        u1_type = "RECEIVER";
-        u1_baud = 420000;
-        
+        u1_type = "RECEIVER"; u1_baud = 420000;
         saveEnabled("u1_en", true, u1_enabled);
-
-        // Restartujemy Serial1 (jeśli był włączony jako inny typ, to teraz będzie CRSF)
         Serial1.end(); 
-        // Uwaga: CRSF używa HardwareSerial, ale biblioteka AlfredoCRSF może chcieć surowy Stream.
-        // Tutaj używamy crsfSerial (HardwareSerial(1)) oddzielnie od Serial1.
-        // Musimy upewnić się, że Serial1 nie blokuje pinów.
-        // W implementacji 'setup' Serial1.begin jest wołany. 
-        // Tutaj w 'handleReceiverLoop' używamy 'crsfSerial'.
-        // Konflikt: HardwareSerial(1) to to samo co Serial1.
-        // Więc musimy wyłączyć Serial1, aby crsfSerial mógł przejąć kontrolę.
-        
         crsfSerial.begin(420000, SERIAL_8N1, rx, tx);
         crsf.begin(crsfSerial);
         receiverMode = true;
-        Serial.printf(">> Receiver Mode ENABLED on UART1 (ELRS 420k @ RX:%d/TX:%d)\n", rx, tx);
+        receiverTelemetry = true; // Auto-enable telemetry when manually enabled via command
+        Serial.printf(">> Receiver Mode ENABLED (Telemetry ON)\n");
     }
     else if (cmd == "DISABLE_RECEIVER_MODE") {
         receiverMode = false;
+        receiverTelemetry = false;
         crsfSerial.end();
         if (u1_enabled) Serial1.begin(u1_baud, SERIAL_8N1, u1_rx, u1_tx);
-        if (u2_enabled) Serial2.begin(u2_baud, SWSERIAL_8N1, u2_rx, u2_tx);
-        if (u3_enabled) Serial3.begin(u3_baud, SWSERIAL_8N1, u3_rx, u3_tx);
         Serial.println(">> Receiver Mode DISABLED");
     }
-    else if (cmd == "ENABLE_GPS_MODE") {
-        if (u1_type == "GPS" && u1_enabled) { 
-            Serial1.end();
-            Serial1.begin(u1_baud, SERIAL_8N1, u1_rx, u1_tx);
-            Serial.printf(">> GPS Mode ENABLED on UART1 (HW) @ %ld\n", u1_baud);
-        }
-        else if (u2_type == "GPS" && u2_enabled) {
-            Serial2.begin(u2_baud, SWSERIAL_8N1, u2_rx, u2_tx);
-            Serial.printf(">> GPS Mode ENABLED on UART2 (SW) @ %ld\n", u2_baud);
-        }
-        else if (u3_type == "GPS" && u3_enabled) {
-            Serial3.begin(u3_baud, SWSERIAL_8N1, u3_rx, u3_tx);
-            Serial.printf(">> GPS Mode ENABLED on UART3 (SW) @ %ld\n", u3_baud);
-        }
-        else {
-            Serial.println("!! BLAD: Nie znaleziono aktywnego UART skonfigurowanego jako GPS.");
+    else if (cmd == "ENABLE_RECEIVER_TELEMETRY") {
+        receiverTelemetry = true;
+        Serial.println(">> Receiver Telemetry ENABLED");
+    }
+    else if (cmd == "DISABLE_RECEIVER_TELEMETRY") {
+        receiverTelemetry = false;
+        Serial.println(">> Receiver Telemetry DISABLED");
+    }
+    else if (cmd == "ENABLE_GPS_MODE" || cmd == "SET_GPS_MODULE:1") {
+        if (!gps_module_enabled) {
+            Serial.println(">> GPS module is disabled in Setup");
+            reportModuleStatus();
             return;
         }
+        if (u1_type == "GPS" && u1_enabled) { Serial1.end(); Serial1.begin(u1_baud, SERIAL_8N1, u1_rx, u1_tx); }
+        else if (u2_type == "GPS" && u2_enabled) { restartUART2(); }
+        else if (u3_type == "GPS" && u3_enabled) { restartUART3(); }
+        else { Serial.println("!! BLAD: Nie znaleziono UART GPS."); return; }
         gpsMode = true;
+        gpsTelemetry = true;
         configureGps();
+        Serial.println(">> GPS Mode ENABLED (Telemetry ON)");
     }
-    else if (cmd == "DISABLE_GPS_MODE") {
+    else if (cmd == "DISABLE_GPS_MODE" || cmd == "SET_GPS_MODULE:0") {
         gpsMode = false;
-        if (!u2_enabled) {
-            Serial2.end();
-        }
+        gpsTelemetry = false;
         Serial.println(">> GPS Mode DISABLED");
+    }
+    else if (cmd == "ENABLE_GPS_TELEMETRY") {
+        gpsTelemetry = true;
+        Serial.println(">> GPS Telemetry ENABLED");
+    }
+    else if (cmd == "DISABLE_GPS_TELEMETRY") {
+        gpsTelemetry = false;
+        Serial.println(">> GPS Telemetry DISABLED");
+    }
+    else if (cmd == "ENABLE_MOTOR_TELEMETRY") {
+        motorTelemetry = true;
+        Serial.println(">> Motor Telemetry ENABLED");
+    }
+    else if (cmd == "DISABLE_MOTOR_TELEMETRY") {
+        motorTelemetry = false;
+        Serial.println(">> Motor Telemetry DISABLED");
+    }
+    else if (cmd == "DISABLE_ALL_TELEMETRY") {
+        gpsTelemetry = false;
+        receiverTelemetry = false;
+        motorTelemetry = false;
+        Serial.println(">> All Telemetry DISABLED");
     }
     else if (cmd.startsWith("SET_PIN_MODE:")) {
         // Implementacja w pliku serial_comm.ino (zaktualizowana)
@@ -820,6 +926,9 @@ void processCommand(String cmd) {
     }
     else if (cmd.startsWith("SET_SERVO_CFG:")) {
         setServoConfigCommand(cmd);
+    }
+    else if (cmd.startsWith("SET_SERVO_RNG:")) {
+        setServoRangeCommand(cmd);
     }
     else if (cmd == "SERVO_TABLE") {
         reportServoConfigs();
@@ -887,9 +996,10 @@ void processCommand(String cmd) {
         sc.lastWrittenUs = us;
 
         persistServo(idx);
-        Serial.printf("SERVO_CFG,%d,%d,%d,%d,%d,%d,%d,%.2f,%d\n",
+        Serial.printf("SERVO_CFG,%d,%d,%d,%d,%d,%d,%d,%.2f,%d,%d,%d,%d,%d\n",
             sc.pin, sc.frequency, sc.minUs, sc.midUs, sc.maxUs,
-            sc.sourceChannel, sc.reverse ? 1 : 0, sc.rate, sc.speed);
+            sc.sourceChannel, sc.reverse ? 1 : 0, sc.rate, sc.speed,
+            sc.mode, sc.minAngle, sc.maxAngle, sc.rangeCount);
         Serial.printf("SERVO_POS,%d,%d\n", pin, us);
     }
 }

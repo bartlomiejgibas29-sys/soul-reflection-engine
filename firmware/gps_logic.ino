@@ -216,7 +216,7 @@ void handleGpsLoop() {
         // For now, let's just ensure we are sending whatever we have.
     }
 
-    if (millis() - lastGpsUpdate > 200) { // 5Hz
+    if (gpsTelemetry && millis() - lastGpsUpdate > 200) { // 5Hz
         lastGpsUpdate = millis();
         
         // Format: GPS_FULL,fix(0/1),sats,lat,lon,alt(m),speed(kmph),course,hdop
@@ -232,7 +232,7 @@ void handleGpsLoop() {
     }
     
     // Send satellite info at 1Hz
-    if (millis() - lastSatUpdate > 1000) {
+    if (gpsTelemetry && millis() - lastSatUpdate > 1000) {
         lastSatUpdate = millis();
         
         if (satCount > 0) {
